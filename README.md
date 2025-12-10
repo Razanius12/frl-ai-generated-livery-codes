@@ -4,16 +4,16 @@
 
 **Status: 18% Complete** — This project is in active development.
 
-This project aims to use **AI-powered image analysis** to generate FRL FR Legends livery codes from any image. The FRL hex encoding patterns were reverse-engineered with AI assistance in just **3 hours**,discovering the underlying format and how shapes are encoded. The foundation has been laid through pattern discovery, and the next phases will focus on expanding the AI generation capabilities.
+This project aims to use **AI-powered image analysis** to generate FRL FR Legends livery codes from any image. The livery code encoding patterns were reverse-engineered with AI assistance in just **3 hours**, discovering the underlying format and how shapes are encoded. The foundation has been laid through pattern discovery, and the next phases will focus on expanding the AI generation capabilities.
 
 **Current Progress:**
 
-- ✅ **Pattern Discovery** — FRL hex encoding format reverse-engineered and documented
-- ✅ **Shape Encoding** — Square shapes can be encoded into FRL hex format
+- ✅ **Pattern Discovery** — Livery code encoding format reverse-engineered and documented
+- ✅ **Shape Encoding** — Square shapes can be encoded into livery code format
 - 🔄 **Image-to-Livery Pipeline** — Partially implemented; foundation for intelligent image sampling established
 - ⏳ **AI Generation Expansion** — Full automated livery generation from images (in development)
 
-The core vision: instead of manually creating patterns, the application will **intelligently sample images** to detect edges, brightness variations, and color information—then encode them into FRL-compatible hex format for use in Forza racing games.
+The core vision: instead of manually creating patterns, the application will **intelligently sample images** to detect edges, brightness variations, and color information—then encode them into FRL-compatible livery code format for use in FR Legends.
 
 ## Quick Start (Windows PowerShell)
 
@@ -47,7 +47,7 @@ npm run dev
 - **Base Grid Size** — Controls sampling cell size (lower = simpler output, higher = more detail)
 - **Threshold** — Brightness contrast detection to identify edges (higher = fewer squares generated)
 - **Live Preview** — Canvas rendering shows generated squares alongside reference image
-- **Copy to Clipboard** — One-click copy all FRL hex codes
+- **Copy to Clipboard** — One-click copy all livery codes
 
 ## How It Works: AI Image-to-Livery Engine
 
@@ -58,7 +58,7 @@ npm run dev
 5. **Color Extraction** — Average RGB color of qualifying cells is extracted
 6. **Square Generation** — Qualifying cells become colored squares positioned and scaled to match the image grid
 7. **Layer Optimization** — If total shapes exceed `maxLayers` (1500), cell size is dynamically increased until constraints are met
-8. **FRL Encoding** — Each generated square is encoded into FRL hex format (40-char hex string per shape)
+8. **Livery Code Encoding** — Each generated square is encoded into FRL livery code format (40-character code per shape)
 
 This algorithm intelligently converts any image into a FRL-compatible livery using pure pixel analysis—no manual pattern definition required.
 
@@ -99,15 +99,15 @@ Parameters (multipart/form-data):
       "blend": "normal"
     }
   ],
-  "frlHex": ["000202000000006400640000FFFFFFFF0001", ...]
+  "frlLiveryCodes": ["000202000000006400640000FFFFFFFF0001", ...]
 }
 ```
 
-## FRL Hex Code Format
+## Livery Code Format
 
-See [`FRL_CODE_ANALYSIS.md`](./documentation/FRL_CODE_ANALYSIS.md) and [`LAYER_53_ANALYSIS.md`](./documentation/LAYER_53_ANALYSIS.md) for detailed documentation on FRL hex encoding and layer structure.
+See [`FRL_CODE_ANALYSIS.md`](./documentation/FRL_CODE_ANALYSIS.md), [`LAYER_53_ANALYSIS.md`](./documentation/LAYER_53_ANALYSIS.md), and [`LIVERY_CODE_FORMAT.md`](./documentation/LIVERY_CODE_FORMAT.md) for detailed documentation on livery code encoding and layer structure.
 
-Each square is encoded as a 40-character hex string (20 bytes):
+Each square is encoded as a 40-character livery code (20 bytes):
 
 - **Bytes 0–1** — Shape type (0x0002 = square)
 - **Bytes 2–3** — Position X (signed int16)
@@ -134,7 +134,7 @@ Each square is encoded as a 40-character hex string (20 bytes):
 
 This project was developed in an innovative way:
 
-1. **AI Pattern Discovery** — Using AI assistance, the FRL hex encoding format was reverse-engineered from documentation in just **3 hours**
+1. **AI Pattern Discovery** — Using AI assistance, the livery code encoding format was reverse-engineered from documentation in just **3 hours**
 2. **Pattern Documentation** — All discovered patterns have been analyzed and documented for shape encoding
 3. **Foundation Building** — The groundwork for AI-driven image sampling has been established
 4. **In Development** — Full AI generation pipeline to automatically convert images to liveries

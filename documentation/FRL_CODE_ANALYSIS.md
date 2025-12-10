@@ -4,7 +4,7 @@
 
 FRL (Functional Rendering Language) shapes are positioned on a **signed 16-bit coordinate system** (-32768 to 32767). The format supports efficient shape definitions with built-in mirror modes for instant symmetry without code duplication.
 
-## Hex Structure
+## Livery Code Structure
 
 Each shape definition is **40 hexadecimal characters** (20 bytes) with the following structure:
 
@@ -35,7 +35,7 @@ LL          = Mirror + Visibility combined (01-07 odd=visible, 00-06 even=hidden
 | Scale Y | 16–19 | int16 (signed) | `0064`, `FF9C` | -32768 to 32767 | Height with flip (negative = v-flip) |
 | Color RGB | 20–25 | RRGGBB | `FF0000`, `4390B5` | `000000`–`FFFFFF` | 24-bit color (Red-Green-Blue) |
 | Opacity | 26–27 | uint8 | `FF`, `CE` | `00`–`FF` | Alpha transparency (FF = opaque, 00 = transparent) |
-| Blend Flags | 28–37 | Hex flags | `FFFFFFFF` | Varies | 8-byte blend mode flags (reserved) |
+| Blend Flags | 28–37 | Hex flags | `FFFFFFFF` | Varies | Reserved blend mode flags (reserved) |
 | Blend Selector | 38–39 | uint8 (last 2 chars) | `01`, `03`, `06` | `00`–`07` | **Visibility & Mirror combined (ODD=visible, EVEN=hidden)**: 01/00=no mirror, 03/02=h-mirror, 05/04=v-mirror, 07/06=both |
 
 ## Scale Encoding (Signed 16-bit with Flip)

@@ -22,7 +22,7 @@
 
 ### Group 1: Position Examples (6 shapes, visible header)
 
-| Shape | Hex Code | Pos X,Y | Scale | Visibility | Mirror | Status |
+| Shape | Livery Code | Pos X,Y | Scale | Visibility | Mirror | Status |
 |-------|----------|---------|-------|-----------|--------|--------|
 | 1 | `000200000000006400640000FFFFFFFF0001` | 0,0 | 100×100 | ✅ Visible | None (01) | ✅ OK |
 | 2 | `000202000000006400640000FFFFFFFF0001` | 512,0 | 100×100 | ✅ Visible | None (01) | ✅ OK |
@@ -39,7 +39,7 @@
 
 **Header:** `FFFF00000000001400140000FFFFFFFF0000` (hidden, no mirror)
 
-| Shape | Hex Code | Position | Mirror | Visibility | Status | Notes |
+| Shape | Livery Code | Position | Mirror | Visibility | Status | Notes |
 |-------|----------|----------|--------|-----------|--------|-------|
 | 1 | `000200B001CA006400640000FFFFFFFF0001` | 176,458 | 01 (none) | ✅ Visible | ✅ OK | Single shape |
 | 2 | `0002FED10000006400640000FFFFFFFF0003` | -303,0 | 03 (h-mirror) | ✅ Visible | ✅ OK | 2 h-mirrored |
@@ -120,7 +120,7 @@
 
 **Header:** `FFFF00000000001400140000FFFFFFFF0000` (hidden, no mirror)
 
-| Shape | Hex Code | Visibility | Last Char | Status |
+| Shape | Livery Code | Visibility | Last Char | Status |
 |-------|----------|-----------|-----------|--------|
 | 1 | `000200000000006400640000FFFFFFFF0001` | ✅ Visible | `01` | ✅ OK |
 | 2 | `000200000000006400640000FFFFFFFF0000` | ❌ Hidden | `00` | ✅ OK |

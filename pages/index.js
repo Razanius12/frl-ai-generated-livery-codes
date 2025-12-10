@@ -96,8 +96,8 @@ export default function Home(){
   }, [result, meta]);
 
   function copyToClipboard() {
-    const hex = (result?.frlHex || []).join('\n');
-    navigator.clipboard.writeText(hex).then(() => {
+    const liveryCode = (result?.frlLiveryCodes || []).join('\n');
+    navigator.clipboard.writeText(liveryCode).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -105,7 +105,8 @@ export default function Home(){
 
   return (
     <div style={{fontFamily:'system-ui,Segoe UI,Roboto',padding:18,maxWidth:480,margin:'0 auto'}}>
-      <h1 style={{fontSize:20,marginBottom:6}}>FRL Square Generator</h1>
+      <h1 style={{fontSize:20,marginBottom:6}}>FRL AI Livery Generator</h1>
+      <div style={{fontSize:12,color:'#666',marginBottom:12}}>by <a href="https://github.com/razanius12" target="_blank" rel="noopener noreferrer" style={{color:'#666',textDecoration:'underline'}}>Razanius12</a></div>
 
       <div style={{display:'flex',flexDirection:'column',gap:10}}>
         <label style={{fontSize:12,fontWeight:600}}>Choose Image</label>
@@ -148,11 +149,11 @@ export default function Home(){
             <div style={{fontSize:14}}>Layers: {meta.layers ?? '-'}</div>
           </div>
 
-          <h3 style={{marginTop:12,fontSize:16}}>FRL Hex Codes</h3>
+          <h3 style={{marginTop:12,fontSize:16}}>FRL Livery Codes</h3>
           <button onClick={copyToClipboard} style={{padding:8,marginBottom:8,borderRadius:6,background:copied?'#10b981':'#3b82f6',color:'white',border:'none',cursor:'pointer'}}>{copied?'✓ Copied!':'Copy All'}</button>
           
           <div style={{maxHeight:200,overflow:'auto',background:'#f6f6f6',padding:10,borderRadius:6,marginBottom:12}}>
-            {(result.frlHex || []).map((h,idx)=> (
+            {(result.frlLiveryCodes || []).map((h,idx)=> (
               <div key={idx} style={{fontFamily:'monospace',fontSize:12,marginBottom:4,wordBreak:'break-all'}}>{h}</div>
             ))}
           </div>

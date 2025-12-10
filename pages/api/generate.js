@@ -1,7 +1,7 @@
 export const config = { api: { bodyParser: false } };
 
 export default async function handler(req, res) {
-  const { analyzeImageAndGenerateSquares, encodeSquareToFrlHex } = require('../../lib/shapeGenerator');
+  const { analyzeImageAndGenerateSquares, encodeSquareToFrlLiveryCode } = require('../../lib/shapeGenerator');
   const formidable = require('formidable');
   const fs = require('fs');
 
@@ -69,9 +69,9 @@ export default async function handler(req, res) {
         meta = { originalWidth: 800, originalHeight: 800, width: 800, height: 800, layers: arr.length, fallback: true };
       }
 
-      const frlHex = shapes.map(s => encodeSquareToFrlHex(s));
+      const frlLiveryCodes = shapes.map(s => encodeSquareToFrlLiveryCode(s));
 
-      res.status(200).json({ meta, shapes, frlHex });
+      res.status(200).json({ meta, shapes, frlLiveryCodes });
     } catch (e) {
       console.error(e);
       res.status(500).json({ error: e.message || 'Internal error' });
