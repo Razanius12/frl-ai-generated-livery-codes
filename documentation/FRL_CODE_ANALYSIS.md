@@ -5,30 +5,44 @@
 - [Overview](#overview)
 - [Livery Code Structure](#livery-code-structure)
   - [Hex Field Breakdown](#hex-field-breakdown)
-- [Field Definitions](#field-definitions)
+- [Field Definitions & Examples](#field-definitions--examples)
   - [Shape Type](#shape-type)
   - [Position (X, Y)](#position-x-y)
+    - [Position Encoding](#position-encoding)
+    - [Position Examples](#position-examples)
   - [Scale (X, Y)](#scale-x-y)
+    - [Scale Encoding](#scale-encoding-signed-16-bit-with-flip)
+    - [Scale Examples (Positive)](#scale-examples-positive)
+    - [Scale Examples (Negative – Flipping)](#scale-examples-negative--flipping)
   - [Rotation](#rotation)
+    - [Rotation Encoding](#rotation-encoding)
+    - [Rotation Value Reference](#rotation-value-reference)
+    - [Rotation Examples](#rotation-examples)
   - [Color Format](#color-format)
+    - [Color Examples](#color-examples)
+    - [Color Value Reference](#color-value-reference)
+    - [Color Test Canvas](#color-test-canvas)
   - [Opacity](#opacity)
+    - [Opacity Examples](#opacity-examples)
+    - [Opacity Value Reference](#opacity-value-reference)
   - [Blend Mode](#blend-mode)
+    - [Blend Mode Examples](#blend-mode-examples)
+    - [Blend Mode Reference](#blend-mode-reference)
+    - [Blend Mode Test Canvas](#blend-mode-test-canvas)
   - [Visibility, Mirror & MIP](#visibility-mirror--mip)
+    - [Visibility + Mirror + MIP Bit Pattern Table](#visibility--mirror--mip-bit-pattern-table)
+    - [Visibility & Mirror Test Canvas](#visibility--mirror-test-canvas)
+    - [Encoding Logic Examples](#encoding-logic-examples)
+    - [MIP/MipMap Feature](#mipmipmap-feature-groups-only)
+    - [Visual Comparison](#visual-comparison-visible-vs-hidden-mirrors)
 - [Group/Canvas Structure](#groupcanvas-structure)
-- [Mirror Modes](#mirror-modes)
-- [Scale Encoding](#scale-encoding-signed-16-bit-with-flip)
-- [Position Encoding](#position-encoding)
-- [Rotation Encoding](#rotation-encoding)
-- [Color Examples](#color-examples)
-- [Opacity Examples](#opacity-examples)
-- [Blend Mode Examples](#blend-mode-examples)
 - [Best Practices](#best-practices)
 
 ---
 
 ## Overview
 
-FRL (Functional Rendering Language) shapes are positioned on a **signed 16-bit coordinate system** (-32768 to 32767). The format supports efficient shape definitions with built-in mirror modes for instant symmetry without code duplication.
+FR Legends livery code shapes are positioned on a **signed 16-bit coordinate system** (-32768 to 32767). The format supports efficient shape definitions with built-in mirror modes for instant symmetry without code duplication.
 
 ## Livery Code Structure
 
@@ -45,7 +59,7 @@ GG GG           = Rotation (chars 20–23)
 HH HH HH        = Color RRGGBB (chars 24–29)
 II              = Opacity (chars 30–31)
 JJ              = Blend Mode (chars 32–33)
-KK LL           = Mirror + Visibility (chars 34–35)
+KK LL           = Mirror + Visibility + MIP (chars 34–35)
 ```
 
 ### Hex Field Breakdown
@@ -63,11 +77,11 @@ Breaking down the default example `000200000000006400640000FFFFFFFF0001`:
 | 24–29 | Color RGB | `FFFFFF` | RRGGBB | White | 24-bit RGB color |
 | 30–31 | Opacity | `FF` | uint8 | 255 (100%) | Alpha transparency |
 | 32–33 | Blend Mode | `00` | uint8 | 00 (Normal) | Blending mode selector |
-| 34–35 | Mirror + Visibility | `01` | uint8 | Visible, no mirror | Visibility & symmetry flags |
+| 34–35 | Mirror + Visibility + MIP | `01` | uint8 | Visible, no mirror | Visibility & symmetry flags |
 
 ---
 
-## Field Definitions
+## Field Definitions & Examples
 
 ### Shape Type
 
@@ -90,6 +104,47 @@ Breaking down the default example `000200000000006400640000FFFFFFFF0001`:
   - `FE00` = -512 (left/up, two's complement)
 - **Description:** Canvas coordinates. Negative values move left/up, positive move right/down.
 
+#### Position Encoding
+
+Positions use **signed 16-bit integers**, supporting both positive and negative coordinates:
+
+| Hex Value | Decimal | Description |
+|-----------|---------|-------------|
+| `0x0000` | 0 | Center origin |
+| `0x00B0` | 176 | Small right/down offset |
+| `0x0200` | 512 | Standard right/down |
+| `0x0380` | 896 | Large right/down |
+| `0xFED1` | -303 | Small left/up (negative) |
+| `0xFE00` | -512 | Standard left/up |
+| `0xFC80` | -896 | Large left/up |
+
+#### Position Examples
+
+Test canvas with 6 squares at different positions:
+
+``` text
+FFFF00000000001400140000FFFFFFFF0001
+<
+    000200000000006400640000FFFFFFFF0001
+    000202000000006400640000FFFFFFFF0001
+    000202000200006400640000FFFFFFFF0001
+    0002FE000000006400640000FFFFFFFF0001
+    0002FE00FE00006400640000FFFFFFFF0001
+    000203800380006400640000FFFFFFFF0001
+>
+```
+
+| # | Code | Pos X | Pos Y | Sca X | Sca Y | Rot | Color | Opacity | Blend | Visibility | Description |
+|---|------|-------|-------|-------|-------|-----|-------|---------|-------|-----------|-------------|
+| 1 | `000200000000006400640000FFFFFFFF0001` | 0000 | 0000 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | 0, 0 → 100×100 |
+| 2 | `000202000000006400640000FFFFFFFF0001` | 0200 | 0000 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | 512, 0 → 100×100 |
+| 3 | `000202000200006400640000FFFFFFFF0001` | 0200 | 0200 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | 512, 512 → 100×100 |
+| 4 | `0002FE000000006400640000FFFFFFFF0001` | FE00 | 0000 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | -512, 0 → 100×100 |
+| 5 | `0002FE00FE00006400640000FFFFFFFF0001` | FE00 | FE00 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | -512, -512 → 100×100 |
+| 6 | `000203800380006400640000FFFFFFFF0001` | 0380 | 0380 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | 896, 896 → 100×100 |
+
+![Position Test Reference](./ref/position.png)
+
 ### Scale (X, Y)
 
 - **Location:** Characters 12–19
@@ -104,89 +159,7 @@ Breaking down the default example `000200000000006400640000FFFFFFFF0001`:
   - `FF9C` = -100 pixels (flipped)
 - **Description:** Shape dimensions. Negative scales flip the shape horizontally or vertically.
 
-### Rotation
-
-- **Location:** Characters 20–23
-- **Type:** int16 (signed 16-bit)
-- **Range:** -32768 to 32767 degrees
-- **Wrap-around:** Normalizes to 0–359° (e.g., -286° → 74°, 816° → 96°)
-- **Examples:**
-  - `0000` = 0° (no rotation)
-  - `002D` = 45°
-  - `005A` = 90°
-  - `00B4` = 180°
-  - `FEE2` = -286° (normalized to 74°)
-- **Description:** Clockwise rotation in degrees. Directly maps to angle.
-
-### Color Format
-
-- **Location:** Characters 24–29
-- **Type:** RRGGBB (24-bit RGB)
-- **Range:** `000000`–`FFFFFF`
-- **Examples:**
-  - `FF0000` = Red
-  - `00FF00` = Green
-  - `0000FF` = Blue
-  - `FFFFFF` = White
-  - `4390B5` = Custom teal
-- **Description:** 24-bit color in hexadecimal (Red-Green-Blue).
-
-### Opacity
-
-- **Location:** Characters 30–31
-- **Type:** uint8 (unsigned 8-bit)
-- **Range:** `00`–`FF` (0–255)
-- **Examples:**
-  - `00` = 0% (fully transparent)
-  - `80` = 50% (semi-transparent)
-  - `FF` = 100% (fully opaque)
-- **Description:** Alpha transparency channel.
-
-### Blend Mode
-
-- **Location:** Characters 32–33
-- **Type:** uint8 (unsigned 8-bit, values 0–7)
-- **Range:**
-  - `00` = Normal
-  - `01` = Add
-  - `02` = Soft Add
-  - `03` = Multiple
-  - `04` = 2x Multiple
-  - `05` = Lighter
-  - `06` = Darker
-  - `07` = Replace
-- **Description:** Compositing mode for how the shape blends with background/layers.
-
-### Visibility, Mirror & MIP
-
-- **Location:** Character 35 (last character)
-- **Type:** uint8 (unsigned 8-bit, values 0–15)
-- **Encoding:** Single byte with 4-bit pattern
-  - **Bit 0 (LSB):** Visibility (1 = visible, 0 = hidden)
-  - **Bit 1:** V-mirror flag (1 = v-mirror enabled)
-  - **Bit 2:** H-mirror flag (1 = h-mirror enabled)
-  - **Bit 3:** MIP/MipMap flag (1 = mip enabled, 0 = mip disabled) **[Groups only]**
-- **Standard Values (0–7):**
-  - `00` = Hidden, no mirrors, no mip
-  - `01` = Visible, no mirrors, no mip
-  - `02` = Hidden, H-mirror only, no mip
-  - `03` = Visible, H-mirror only, no mip
-  - `04` = Hidden, V-mirror only, no mip
-  - `05` = Visible, V-mirror only, no mip
-  - `06` = Hidden, both mirrors, no mip
-  - `07` = Visible, both mirrors, no mip
-- **MIP/MipMap Values (8–15, Groups Only):**
-  - `08` = Hidden, no mirrors, **mip enabled**
-  - `09` = Visible, no mirrors, **mip enabled**
-  - `0A` = Hidden, H-mirror only, **mip enabled**
-  - `0B` = Visible, H-mirror only, **mip enabled**
-  - `0C` = Hidden, V-mirror only, **mip enabled**
-  - `0D` = Visible, V-mirror only, **mip enabled**
-  - `0E` = Hidden, both mirrors, **mip enabled**
-  - `0F` = Visible, both mirrors, **mip enabled**
-- **Description:** Controls shape visibility, automatic mirror duplication, and (for groups only) anti-aliasing via MipMap filtering.
-
-## Scale Encoding (Signed 16-bit with Flip)
+#### Scale Encoding (Signed 16-bit with Flip)
 
 Scale values represent the width (Scale X) and height (Scale Y) of shapes in pixels. Using **signed 16-bit integers** allows both positive and negative values:
 
@@ -199,7 +172,7 @@ Scale values represent the width (Scale X) and height (Scale Y) of shapes in pix
 - **Negative Scale Y:** Flips shape vertically (top-bottom mirror)
 - **Both negative:** Flips both horizontally and vertically (180° flip)
 
-### Scale Examples (Positive)
+##### Scale Examples (Positive)
 
 Test canvas with 10 squares at varying positive scales:
 
@@ -234,7 +207,7 @@ FFFF00000000001400140000FFFFFFFF0001
 
 ![Scale Test Reference](./ref/scale.png)
 
-### Scale Examples (Negative – Flipping)
+##### Scale Examples (Negative – Flipping)
 
 Test canvas with same squares at negative scales (flipped):
 
@@ -276,122 +249,21 @@ FFFF00000000001400140000FFFFFFFF0001
 | 150 | `0096` | 150 | `FF6A` | -150 | Flipped horizontally & vertically |
 | 300 | `012C` | 300 | `FED4` | -300 | Flipped horizontally & vertically |
 
-## Position Encoding
+### Rotation
 
-Positions use **signed 16-bit integers**, supporting both positive and negative coordinates:
+- **Location:** Characters 20–23
+- **Type:** int16 (signed 16-bit)
+- **Range:** -32768 to 32767 degrees
+- **Wrap-around:** Normalizes to 0–359° (e.g., -286° → 74°, 816° → 96°)
+- **Examples:**
+  - `0000` = 0° (no rotation)
+  - `002D` = 45°
+  - `005A` = 90°
+  - `00B4` = 180°
+  - `FEE2` = -286° (normalized to 74°)
+- **Description:** Clockwise rotation in degrees. Directly maps to angle.
 
-| Hex Value | Decimal | Description |
-|-----------|---------|-------------|
-| `0x0000` | 0 | Center origin |
-| `0x00B0` | 176 | Small right/down offset |
-| `0x0200` | 512 | Standard right/down |
-| `0x0380` | 896 | Large right/down |
-| `0xFED1` | -303 | Small left/up (negative) |
-| `0xFE00` | -512 | Standard left/up |
-| `0xFC80` | -896 | Large left/up |
-
-### Position Examples
-
-Test canvas with 6 squares at different positions:
-
-``` text
-FFFF00000000001400140000FFFFFFFF0001
-<
-    000200000000006400640000FFFFFFFF0001
-    000202000000006400640000FFFFFFFF0001
-    000202000200006400640000FFFFFFFF0001
-    0002FE000000006400640000FFFFFFFF0001
-    0002FE00FE00006400640000FFFFFFFF0001
-    000203800380006400640000FFFFFFFF0001
->
-```
-
-| # | Code | Pos X | Pos Y | Sca X | Sca Y | Rot | Color | Opacity | Blend | Visibility | Description |
-|---|------|-------|-------|-------|-------|-----|-------|---------|-------|-----------|-------------|
-| 1 | `000200000000006400640000FFFFFFFF0001` | 0000 | 0000 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | 0, 0 → 100×100 |
-| 2 | `000202000000006400640000FFFFFFFF0001` | 0200 | 0000 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | 512, 0 → 100×100 |
-| 3 | `000202000200006400640000FFFFFFFF0001` | 0200 | 0200 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | 512, 512 → 100×100 |
-| 4 | `0002FE000000006400640000FFFFFFFF0001` | FE00 | 0000 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | -512, 0 → 100×100 |
-| 5 | `0002FE00FE00006400640000FFFFFFFF0001` | FE00 | FE00 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | -512, -512 → 100×100 |
-| 6 | `000203800380006400640000FFFFFFFF0001` | 0380 | 0380 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | 896, 896 → 100×100 |
-
-![Position Test Reference](./ref/position.png)
-
-## Group/Canvas Structure
-
-Shapes are typically wrapped in a **group (canvas)** element for organization and coordinate system containment:
-
-``` text
-FFFF00000000001400140000FFFFFFFF0001
-<
-    000200000000006400640000FFFFFFFF0001
-    000202000000006400640000FFFFFFFF0001
-    000202000200006400640000FFFFFFFF0001
-    0002FE000000006400640000FFFFFFFF0001
-    0002FE00FE00006400640000FFFFFFFF0001
-    000203800380006400640000FFFFFFFF0001
->
-```
-
-**Group Header:** `FFFF00000000001400140000FFFFFFFF0001`
-
-- Type: `FFFF` (group)
-- Position: (0, 0)
-- Scale: (20, 20)
-- All shapes inside inherit and render relative to canvas properties
-
-**Contained Shapes:**
-
-| # | Code | Pos X,Y | Sca X,Y | Rot | Color | Description |
-|---|------|---------|---------|-----|-------|-------------|
-| 1 | `000200000000006400640000FFFFFFFF0001` | 0, 0 | 100, 100 | 0° | White | Center square |
-| 2 | `000202000000006400640000FFFFFFFF0001` | 512, 0 | 100, 100 | 0° | White | Right of center |
-| 3 | `000202000200006400640000FFFFFFFF0001` | 512, 512 | 100, 100 | 0° | White | Bottom-right |
-| 4 | `0002FE000000006400640000FFFFFFFF0001` | -512, 0 | 100, 100 | 0° | White | Left of center |
-| 5 | `0002FE00FE00006400640000FFFFFFFF0001` | -512, -512 | 100, 100 | 0° | White | Top-left |
-| 6 | `000203800380006400640000FFFFFFFF0001` | 896, 896 | 100, 100 | 0° | White | Bottom-right corner |
-
----
-
-## Mirror Modes
-
-Mirrors duplicate shapes with automatic symmetry, reducing file size significantly. Controlled by the **last character** of the code (visibility & mirror combined):
-
-| Code | Mirror Type | Total Shapes | Visibility | Effect |
-|------|-------------|--------------|-----------|--------|
-| `01` | None | 1 | Visible | Single shape at defined position |
-| `03` | Horizontal | 2 | Visible | Original + left-right mirror |
-| `05` | Vertical | 2 | Visible | Original + top-bottom mirror |
-| `07` | Both (H+V) | 4 | Visible | All 4 quadrants (full symmetry) |
-| `00` | None | 1 | Hidden | Hidden single shape |
-| `02` | Horizontal | 2 | Hidden | Hidden pair with h-mirror |
-| `04` | Vertical | 2 | Hidden | Hidden pair with v-mirror |
-| `06` | Both (H+V) | 4 | Hidden | Hidden 4-way symmetry |
-
-### Mirror Test Examples
-
-**Test Canvas:**
-
-``` text
-FFFF00000000001400140000FFFFFFFF0001
-<
-    000200B001CA006400640000FFFFFFFF0001
-    0002FED10000006400640000FFFFFFFF0003
-    0002FC800380006400640000FFFFFFFF0007
->
-```
-
-| Example | Code | Pos X, Y | Sca X, Y | Rot | Color | Mirror | Shapes | Description |
-|---------|------|----------|----------|-----|-------|--------|--------|-------------|
-| 1 | `000200B001CA006400640000FFFFFFFF0001` | 176, 458 | 100, 100 | 0° | White | 01 (none) | 1 | Single square at offset |
-| 2 | `0002FED10000006400640000FFFFFFFF0003` | -303, 0 | 100, 100 | 0° | White | 03 (H) | 2 | Pair centered horizontally |
-| 3 | `0002FC800380006400640000FFFFFFFF0007` | -896, 896 | 100, 100 | 0° | White | 07 (H+V) | 4 | All 4 corners with full symmetry |
-
-![Mirror Test Reference](./ref/mirror.png)
-
----
-
-## Rotation Encoding
+#### Rotation Encoding
 
 Rotation is stored as a **16-bit signed integer** (int16, range -32768 to 32767) in characters 20–23. Values represent degrees directly, with automatic wrap-around for values outside 0–359°.
 
@@ -409,7 +281,7 @@ Final_Rotation = Rotation_Value mod 360
 If negative: Final_Rotation = Rotation_Value + 360
 ```
 
-### Rotation Value Reference
+#### Rotation Value Reference
 
 | Rotation | Hex Value | Decimal | Signed Int16 | Normalized | Description |
 |----------|-----------|---------|---|---|-------------|
@@ -423,7 +295,7 @@ If negative: Final_Rotation = Rotation_Value + 360
 | -286° | `FEE2` | 65250 | -286 | 74° | Negative wrap-around (360-286) |
 | 816° | `0330` | 816 | 816 | 96° | Positive wrap-around (816 mod 360) |
 
-### Rotation Examples
+#### Rotation Examples
 
 Test canvas with rotated squares and rectangles:
 
@@ -489,13 +361,24 @@ Result: White rectangle at (329, 438), size 143×72, rotated -286° (visually eq
 - **Negative rotations:** Stored as signed int16 (-32768 to -1°), normalized to equivalent positive angles
 - **Wrap-around:** All values automatically normalize to 0–359° range during rendering
 
----
+### Color Format
 
-## Color Examples
+- **Location:** Characters 24–29
+- **Type:** RRGGBB (24-bit RGB)
+- **Range:** `000000`–`FFFFFF`
+- **Examples:**
+  - `FF0000` = Red
+  - `00FF00` = Green
+  - `0000FF` = Blue
+  - `FFFFFF` = White
+  - `4390B5` = Custom teal
+- **Description:** 24-bit color in hexadecimal (Red-Green-Blue).
+
+#### Color Examples
 
 Colors use **24-bit RGB** in hexadecimal (RRGGBB) stored in characters 24–29. All 16.7 million colors are supported.
 
-### Color Value Reference
+#### Color Value Reference
 
 | Color | Hex Value | Description |
 |-------|-----------|-------------|
@@ -509,7 +392,7 @@ Colors use **24-bit RGB** in hexadecimal (RRGGBB) stored in characters 24–29. 
 | Black | `000000` | No color (0, 0, 0) |
 | Custom | `4390B5` | Teal blue example |
 
-### Color Test Canvas
+#### Color Test Canvas
 
 Test canvas with 9 colored squares:
 
@@ -542,13 +425,22 @@ FFFF00000000001400140000FFFFFFFF0001
 
 ![Color Blends Test Reference](./ref/colorblends.png)
 
----
+### Opacity
 
-## Opacity Examples
+- **Location:** Characters 30–31
+- **Type:** uint8 (unsigned 8-bit)
+- **Range:** `00`–`FF` (0–255)
+- **Examples:**
+  - `00` = 0% (fully transparent)
+  - `80` = 50% (semi-transparent)
+  - `FF` = 100% (fully opaque)
+- **Description:** Alpha transparency channel.
+
+#### Opacity Examples
 
 Opacity (alpha transparency) is stored as an **unsigned 8-bit integer** in characters 30–31 with values from 0–255.
 
-### Opacity Value Reference
+#### Opacity Value Reference
 
 | Opacity | Hex | Decimal | Percentage | Description |
 |---------|-----|---------|------------|-------------|
@@ -567,13 +459,26 @@ Opacity_Percentage = (Opacity_Hex / 255) × 100
 Opacity_Hex = (Opacity_Percentage / 100) × 255
 ```
 
----
+### Blend Mode
 
-## Blend Mode Examples
+- **Location:** Characters 32–33
+- **Type:** uint8 (unsigned 8-bit, values 0–7)
+- **Range:**
+  - `00` = Normal
+  - `01` = Add
+  - `02` = Soft Add
+  - `03` = Multiple
+  - `04` = 2x Multiple
+  - `05` = Lighter
+  - `06` = Darker
+  - `07` = Replace
+- **Description:** Compositing mode for how the shape blends with background/layers.
+
+#### Blend Mode Examples
 
 Blend mode controls how a shape composites with the background and underlying layers. Stored in characters 32–33 as a value from 0–7.
 
-### Blend Mode Reference
+#### Blend Mode Reference
 
 | Mode # | Hex | Blend Mode | Description |
 |--------|-----|-----------|-------------|
@@ -586,7 +491,7 @@ Blend mode controls how a shape composites with the background and underlying la
 | 6 | `06` | Darker | Keeps darker pixels (min of RGB values) |
 | 7 | `07` | Replace | Completely replaces background (ignores alpha) |
 
-### Blend Mode Test Canvas
+#### Blend Mode Test Canvas
 
 Test canvas with 8 white squares at different blend modes:
 
@@ -627,25 +532,36 @@ AABBCCCCDDDDEEEEFFFFGGGGHHHHIIJJKKLL
 
 ![Color Blends Test Reference](./ref/colorblends.png)
 
----
+### Visibility, Mirror & MIP
 
-## Visibility, Mirror & MIP Combined Encoding
-
-Shape visibility, mirror modes, and MIP filtering are **elegantly combined in a single byte** (the last character of the 36-character code) using a **bit-pattern encoding**. This unified approach encodes four properties in one hex digit:
-
-**Key Properties:**
-
-- **Encoding:** Single hex digit (0–7) with 3-bit pattern
+- **Location:** Character 35 (last character)
+- **Type:** uint8 (unsigned 8-bit, values 0–15)
+- **Encoding:** Single byte with 4-bit pattern
   - **Bit 0 (LSB):** Visibility (1 = visible, 0 = hidden)
   - **Bit 1:** V-mirror flag (1 = v-mirror enabled)
   - **Bit 2:** H-mirror flag (1 = h-mirror enabled)
-- **Visibility pattern:** ODD values (1, 3, 5, 7) = visible, EVEN values (0, 2, 4, 6) = hidden
-- **Mirror independence:** Mirrors apply and create duplicates even when shape is hidden
-- **Use cases:**
-  - Visible shapes with mirrors for symmetrical designs
-  - Hidden mirrored shapes for layout scaffolding/guides (invisible but calculated)
+  - **Bit 3:** MIP/MipMap flag (1 = mip enabled, 0 = mip disabled) **[Groups only]**
+- **Standard Values (0–7):**
+  - `00` = Hidden, no mirrors, no mip
+  - `01` = Visible, no mirrors, no mip
+  - `02` = Hidden, H-mirror only, no mip
+  - `03` = Visible, H-mirror only, no mip
+  - `04` = Hidden, V-mirror only, no mip
+  - `05` = Visible, V-mirror only, no mip
+  - `06` = Hidden, both mirrors, no mi
+  - `07` = Visible, both mirrors, no mip
+- **MIP/MipMap Values (8–15, Groups Only):**
+  - `08` = Hidden, no mirrors, **mip enabled**
+  - `09` = Visible, no mirrors, **mip enabled**
+  - `0A` = Hidden, H-mirror only, **mip enabled**
+  - `0B` = Visible, H-mirror only, **mip enabled**
+  - `0C` = Hidden, V-mirror only, **mip enabled**
+  - `0D` = Visible, V-mirror only, **mip enabled**
+  - `0E` = Hidden, both mirrors, **mip enabled**
+  - `0F` = Visible, both mirrors, **mip enabled**
+- **Description:** Controls shape visibility, automatic mirror duplication, and (for groups only) anti-aliasing via MipMap filtering.
 
-### Visibility + Mirror + MIP Bit Pattern Table
+#### Visibility + Mirror + MIP Bit Pattern Table
 
 | Value | Hex | Binary | Visibility | H-Mirror | V-Mirror | MIP | Total Instances | Description |
 |-------|-----|--------|-----------|----------|----------|-----|---------|-------------|
@@ -666,7 +582,7 @@ Shape visibility, mirror modes, and MIP filtering are **elegantly combined in a 
 | 14 | `0E` | 1110 | ❌ Hidden | ✅ Yes | ✅ Yes | ✅ **MIP** | 4 | Four hidden fully-mirrored instances, **mip enabled** (groups only) |
 | 15 | `0F` | 1111 | ✅ Visible | ✅ Yes | ✅ Yes | ✅ **MIP** | 4 | Four visible fully-mirrored instances, **mip enabled** (groups only) |
 
-### Visibility & Mirror Test Canvas
+#### Visibility & Mirror Test Canvas
 
 Test canvas demonstrating all 8 combinations with the same position and size:
 
@@ -695,9 +611,9 @@ FFFF00000000006400640000FFFFFFFF0001
 | 7 | `...FFFFFFFF0007` | `07` | ✅ Visible | Both | 4 | 4 visible white squares (full 4-way symmetry) |
 | 8 | `...FFFFFFFF0006` | `06` | ❌ Hidden | Both | 4 | No rendering (4 fully-mirrored hidden shapes) |
 
-### Encoding Logic Examples
+#### Encoding Logic Examples
 
-#### Example 1: Visible, No Mirror (01)
+##### Example 1: Visible, No Mirror (01)
 
 - Hex: `0002FE000000006400640000FFFFFFFF0001`
 - Last char: `01` (binary 001)
@@ -706,7 +622,7 @@ FFFF00000000006400640000FFFFFFFF0001
   - Bit 2 = 0 → No H-mirror
 - Result: **1 visible shape** at (-512, 0), 100×100, white
 
-#### Example 2: Visible, H-Mirror Only (03)
+##### Example 2: Visible, H-Mirror Only (03)
 
 - Hex: `0002FE000000006400640000FFFFFFFF0003`
 - Last char: `03` (binary 011)
@@ -715,7 +631,7 @@ FFFF00000000006400640000FFFFFFFF0001
   - Bit 2 = 0 → No V-mirror
 - Result: **2 visible shapes** at (-512, 0) with h-mirror symmetry (original + left-right mirror)
 
-#### Example 3: Visible, Both Mirrors (07)
+##### Example 3: Visible, Both Mirrors (07)
 
 - Hex: `0002FE000000006400640000FFFFFFFF0007`
 - Last char: `07` (binary 111)
@@ -724,7 +640,7 @@ FFFF00000000006400640000FFFFFFFF0001
   - Bit 2 = 1 → **V-mirror enabled**
 - Result: **4 visible shapes** at (-512, 0) with full 4-way symmetry (all quadrants)
 
-#### Example 4: Hidden, Both Mirrors (06)
+##### Example 4: Hidden, Both Mirrors (06)
 
 - Hex: `0002FE79FEDF006400640000FFFFFFFF0006`
 - Last char: `06` (binary 110)
@@ -734,7 +650,7 @@ FFFF00000000006400640000FFFFFFFF0001
 - Result: **4 hidden shapes** (not rendered, but 4 mirrored instances calculated)
 - **Use case:** Layout scaffolding, invisible guide shapes for alignment
 
-### MIP/MipMap Feature (Groups Only)
+#### MIP/MipMap Feature (Groups Only)
 
 **MIP (MipMap) Filtering:**
 
@@ -748,7 +664,7 @@ FFFF00000000006400640000FFFFFFFF0001
   - Reducing aliasing artifacts on scaled group content
   - Creating polished visual effects while maintaining sharp edges on regular shapes
 
-### Why This Encoding is Elegant
+#### Why This Encoding is Elegant
 
 1. **Single byte encodes 4 independent properties:** Visibility + H-mirror + V-mirror + MIP
 2. **Binary bit logic:** Each property is a separate bit, allowing 16 total combinations (0–15)
@@ -758,7 +674,7 @@ FFFF00000000006400640000FFFFFFFF0001
 6. **MIP extends standard encoding:** Values 8–15 add mip functionality without conflicting with standard values 0–7
 7. **Selective feature:** MIP only affects groups, allowing precise control per shape type
 
-### Field Location
+#### Field Location
 
 The visibility, mirror, and MIP encoding occupies the **last character** of the 36-character code:
 
@@ -788,7 +704,7 @@ MIP encoding (groups only):
 0E = 0b1110 = hidden, both mirrors, mip enabled (groups only)
 ```
 
-### Visual Comparison: Visible vs Hidden Mirrors
+#### Visual Comparison: Visible vs Hidden Mirrors
 
 | Scenario | Code Ending | Visual | Hidden Benefit |
 |----------|------------|--------|---|
@@ -798,6 +714,42 @@ MIP encoding (groups only):
 | **Hidden 4-way (Both)** | `0006` | ❌ 0 shapes shown | Invisible scaffolding in all quadrants |
 
 This design allows designers to create invisible structural guides and helper shapes that maintain mirror relationships without cluttering the visual output.
+
+---
+
+## Group/Canvas Structure
+
+Shapes are typically wrapped in a **group (canvas)** element for organization and coordinate system containment:
+
+``` text
+FFFF00000000001400140000FFFFFFFF0001
+<
+    000200000000006400640000FFFFFFFF0001
+    000202000000006400640000FFFFFFFF0001
+    000202000200006400640000FFFFFFFF0001
+    0002FE000000006400640000FFFFFFFF0001
+    0002FE00FE00006400640000FFFFFFFF0001
+    000203800380006400640000FFFFFFFF0001
+>
+```
+
+**Group Header:** `FFFF00000000001400140000FFFFFFFF0001`
+
+- Type: `FFFF` (group)
+- Position: (0, 0)
+- Scale: (20, 20)
+- All shapes inside inherit and render relative to canvas properties
+
+**Contained Shapes:**
+
+| # | Code | Pos X,Y | Sca X,Y | Rot | Color | Description |
+|---|------|---------|---------|-----|-------|-------------|
+| 1 | `000200000000006400640000FFFFFFFF0001` | 0, 0 | 100, 100 | 0° | White | Center square |
+| 2 | `000202000000006400640000FFFFFFFF0001` | 512, 0 | 100, 100 | 0° | White | Right of center |
+| 3 | `000202000200006400640000FFFFFFFF0001` | 512, 512 | 100, 100 | 0° | White | Bottom-right |
+| 4 | `0002FE000000006400640000FFFFFFFF0001` | -512, 0 | 100, 100 | 0° | White | Left of center |
+| 5 | `0002FE00FE00006400640000FFFFFFFF0001` | -512, -512 | 100, 100 | 0° | White | Top-left |
+| 6 | `000203800380006400640000FFFFFFFF0001` | 896, 896 | 100, 100 | 0° | White | Bottom-right corner |
 
 ---
 
@@ -812,3 +764,8 @@ This design allows designers to create invisible structural guides and helper sh
 7. **Verify blend modes** — Test each blend mode to understand visual effects on your specific design
 8. **Use hidden mirrors for guides** — Create invisible scaffolding with hidden mirrored shapes for alignment
 9. **Apply MIP to groups** — Use MIP filtering (values `08`–`0F`) on groups containing rasterized/pixelated content to smooth edges and reduce aliasing
+10. **Mirror test examples:**
+    - Single shape (no mirror): `...FFFFFFFF0001`
+    - Horizontal pair: `...FFFFFFFF0003`
+    - Vertical pair: `...FFFFFFFF0005`
+    - 4-way symmetry: `...FFFFFFFF0007`
