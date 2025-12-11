@@ -58,7 +58,7 @@ npm run dev
 5. **Color Extraction** — Average RGB color of qualifying cells is extracted
 6. **Square Generation** — Qualifying cells become colored squares positioned and scaled to match the image grid
 7. **Layer Optimization** — If total shapes exceed `maxLayers` (1500), cell size is dynamically increased until constraints are met
-8. **Livery Code Encoding** — Each generated square is encoded into FRL livery code format (40-character code per shape)
+8. **Livery Code Encoding** — Each generated square is encoded into FRL livery code format (36-character code per shape)
 
 This algorithm intelligently converts any image into a FRL-compatible livery using pure pixel analysis—no manual pattern definition required.
 
@@ -107,27 +107,33 @@ Parameters (multipart/form-data):
 
 See [`FRL_CODE_ANALYSIS.md`](./documentation/FRL_CODE_ANALYSIS.md), [`LAYER_53_ANALYSIS.md`](./documentation/LAYER_53_ANALYSIS.md), and [`LIVERY_CODE_FORMAT.md`](./documentation/LIVERY_CODE_FORMAT.md) for detailed documentation on livery code encoding and layer structure.
 
-Each square is encoded as a 40-character livery code (20 bytes):
+Each shape is encoded as a 36-character livery code (18 bytes):
 
-- **Bytes 0–1** — Shape type (0x0002 = square)
-- **Bytes 2–3** — Position X (signed int16)
-- **Bytes 4–5** — Position Y (signed int16)
-- **Bytes 6–7** — Scale X (unsigned int16)
-- **Bytes 8–9** — Scale Y (unsigned int16)
-- **Bytes 10–12** — RGB color (3 bytes)
-- **Bytes 13–19** — Opacity, blend mode, and flags
+- **Characters 0–3** — Shape type (0002 = square, FFFF = group)
+- **Characters 4–7** — Position X (signed int16)
+- **Characters 8–11** — Position Y (signed int16)
+- **Characters 12–15** — Scale X (signed int16, negative = horizontal flip)
+- **Characters 16–19** — Scale Y (signed int16, negative = vertical flip)
+- **Characters 20–23** — Rotation (signed int16, in degrees)
+- **Characters 24–29** — RGB color (24-bit)
+- **Characters 30–31** — Opacity (0–FF)
+- **Characters 32–33** — Blend mode (0–7)
+- **Characters 34–35** — Visibility + Mirror + MIP flags
 
 **Example:**
 
 ```text
 000202000000006400640000FFFFFFFF0001
-├─ 0002      = Square type
+├─ 0002      = Square shape type
 ├─ 0200      = Position X: 512
 ├─ 0000      = Position Y: 0
 ├─ 0064      = Scale X: 100
 ├─ 0064      = Scale Y: 100
-├─ 000000    = RGB: black (0,0,0)
-└─ FFFFFFFF0001 = White opacity, normal blend
+├─ 0000      = Rotation: 0°
+├─ FFFFFF    = Color: white (RGB 255,255,255)
+├─ FF        = Opacity: fully opaque (100%)
+├─ 00        = Blend Mode: Normal
+└─ 01        = Visible, no mirror, no MIP
 ```
 
 ## Development & Reverse Engineering

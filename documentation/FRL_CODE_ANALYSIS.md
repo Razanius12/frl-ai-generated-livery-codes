@@ -1,42 +1,190 @@
 # FRL Code Analysis Documentation
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Livery Code Structure](#livery-code-structure)
+  - [Hex Field Breakdown](#hex-field-breakdown)
+- [Field Definitions](#field-definitions)
+  - [Shape Type](#shape-type)
+  - [Position (X, Y)](#position-x-y)
+  - [Scale (X, Y)](#scale-x-y)
+  - [Rotation](#rotation)
+  - [Color Format](#color-format)
+  - [Opacity](#opacity)
+  - [Blend Mode](#blend-mode)
+  - [Visibility, Mirror & MIP](#visibility-mirror--mip)
+- [Group/Canvas Structure](#groupcanvas-structure)
+- [Mirror Modes](#mirror-modes)
+- [Scale Encoding](#scale-encoding-signed-16-bit-with-flip)
+- [Position Encoding](#position-encoding)
+- [Rotation Encoding](#rotation-encoding)
+- [Color Examples](#color-examples)
+- [Opacity Examples](#opacity-examples)
+- [Blend Mode Examples](#blend-mode-examples)
+- [Best Practices](#best-practices)
+
+---
+
 ## Overview
 
 FRL (Functional Rendering Language) shapes are positioned on a **signed 16-bit coordinate system** (-32768 to 32767). The format supports efficient shape definitions with built-in mirror modes for instant symmetry without code duplication.
 
 ## Livery Code Structure
 
-Each shape definition is **40 hexadecimal characters** (20 bytes) with the following structure:
+Each shape definition is **36 hexadecimal characters** (18 bytes) organized sequentially in this order:
 
 ``` text
 AABBCCCCDDDDEEEEFFFFGGGGHHHHIIJJKKLL
-AA BB       = Shape type (0002 = square)
-CC CC       = Position X (signed int16)
-DD DD       = Position Y (signed int16)
-EE EE       = Scale X (signed int16, negative = flip)
-FF FF       = Scale Y (signed int16, negative = flip)
-GG GG       = Color Red (RR in RRGGBB)
-HH HH       = Color Green-Blue (GGBB in RRGGBB)
-II          = Opacity/Alpha (00-FF)
-JJ JJ       = Blend flags (8 chars reserved)
-KK          = Blend selector (01-07)
-LL          = Mirror + Visibility combined (01-07 odd=visible, 00-06 even=hidden)
-            = Bit pattern: 01/00=no mirror, 03/02=h-mirror, 05/04=v-mirror, 07/06=both
+AA BB           = Shape type (chars 0–3)
+CC CC           = Position X (chars 4–7)
+DD DD           = Position Y (chars 8–11)
+EE EE           = Scale X (chars 12–15)
+FF FF           = Scale Y (chars 16–19)
+GG GG           = Rotation (chars 20–23)
+HH HH HH        = Color RRGGBB (chars 24–29)
+II              = Opacity (chars 30–31)
+JJ              = Blend Mode (chars 32–33)
+KK LL           = Mirror + Visibility (chars 34–35)
 ```
 
-### Detailed Field Breakdown
+### Hex Field Breakdown
 
-| Field | Hex Offset | Type | Example | Range | Description |
-|-------|------------|------|---------|-------|-------------|
-| Shape Type | 0–3 | uint16 | `0002` | `0001`–`FFFF` | Shape identifier (0002 = square) |
-| Position X | 4–7 | int16 (signed) | `0200`, `FE00` | -32768 to 32767 | X coordinate on canvas |
-| Position Y | 8–11 | int16 (signed) | `0200`, `FE00` | -32768 to 32767 | Y coordinate on canvas |
-| Scale X | 12–15 | int16 (signed) | `0064`, `FF9C` | -32768 to 32767 | Width with flip (negative = h-flip) |
-| Scale Y | 16–19 | int16 (signed) | `0064`, `FF9C` | -32768 to 32767 | Height with flip (negative = v-flip) |
-| Color RGB | 20–25 | RRGGBB | `FF0000`, `4390B5` | `000000`–`FFFFFF` | 24-bit color (Red-Green-Blue) |
-| Opacity | 26–27 | uint8 | `FF`, `CE` | `00`–`FF` | Alpha transparency (FF = opaque, 00 = transparent) |
-| Blend Flags | 28–37 | Hex flags | `FFFFFFFF` | Varies | Reserved blend mode flags (reserved) |
-| Blend Selector | 38–39 | uint8 (last 2 chars) | `01`, `03`, `06` | `00`–`07` | **Visibility & Mirror combined (ODD=visible, EVEN=hidden)**: 01/00=no mirror, 03/02=h-mirror, 05/04=v-mirror, 07/06=both |
+Breaking down the default example `000200000000006400640000FFFFFFFF0001`:
+
+| Char Range | Field Name | Hex Value | Type | Value | Description |
+|---|---|---|---|---|---|
+| 0–3 | Shape Type | `0002` | uint16 | Square | Shape identifier |
+| 4–7 | Position X | `0000` | int16 | 0 | X coordinate |
+| 8–11 | Position Y | `0000` | int16 | 0 | Y coordinate |
+| 12–15 | Scale X | `0064` | int16 | 100 | Width (pixels) |
+| 16–19 | Scale Y | `0064` | int16 | 100 | Height (pixels) |
+| 20–23 | Rotation | `0000` | int16 | 0° | Rotation in degrees |
+| 24–29 | Color RGB | `FFFFFF` | RRGGBB | White | 24-bit RGB color |
+| 30–31 | Opacity | `FF` | uint8 | 255 (100%) | Alpha transparency |
+| 32–33 | Blend Mode | `00` | uint8 | 00 (Normal) | Blending mode selector |
+| 34–35 | Mirror + Visibility | `01` | uint8 | Visible, no mirror | Visibility & symmetry flags |
+
+---
+
+## Field Definitions
+
+### Shape Type
+
+- **Location:** Characters 0–3
+- **Type:** uint16 (unsigned 16-bit)
+- **Example:** `0002` (square)
+- **Range:** `0001`–`FFFF`
+- **Description:** Identifier for the shape type. Common value: `0002` for squares.
+
+### Position (X, Y)
+
+- **Location:** Characters 4–11
+  - Position X: Characters 4–7
+  - Position Y: Characters 8–11
+- **Type:** int16 (signed 16-bit)
+- **Range:** -32768 to 32767
+- **Examples:**
+  - `0000` = 0 (center/origin)
+  - `0200` = 512 (right/down)
+  - `FE00` = -512 (left/up, two's complement)
+- **Description:** Canvas coordinates. Negative values move left/up, positive move right/down.
+
+### Scale (X, Y)
+
+- **Location:** Characters 12–19
+  - Scale X: Characters 12–15
+  - Scale Y: Characters 16–19
+- **Type:** int16 (signed 16-bit)
+- **Range:** -32768 to 32767
+- **Positive values:** Normal scale (size in pixels)
+- **Negative values:** Flipped scale (same size, but mirrored)
+- **Examples:**
+  - `0064` = 100 pixels (normal)
+  - `FF9C` = -100 pixels (flipped)
+- **Description:** Shape dimensions. Negative scales flip the shape horizontally or vertically.
+
+### Rotation
+
+- **Location:** Characters 20–23
+- **Type:** int16 (signed 16-bit)
+- **Range:** -32768 to 32767 degrees
+- **Wrap-around:** Normalizes to 0–359° (e.g., -286° → 74°, 816° → 96°)
+- **Examples:**
+  - `0000` = 0° (no rotation)
+  - `002D` = 45°
+  - `005A` = 90°
+  - `00B4` = 180°
+  - `FEE2` = -286° (normalized to 74°)
+- **Description:** Clockwise rotation in degrees. Directly maps to angle.
+
+### Color Format
+
+- **Location:** Characters 24–29
+- **Type:** RRGGBB (24-bit RGB)
+- **Range:** `000000`–`FFFFFF`
+- **Examples:**
+  - `FF0000` = Red
+  - `00FF00` = Green
+  - `0000FF` = Blue
+  - `FFFFFF` = White
+  - `4390B5` = Custom teal
+- **Description:** 24-bit color in hexadecimal (Red-Green-Blue).
+
+### Opacity
+
+- **Location:** Characters 30–31
+- **Type:** uint8 (unsigned 8-bit)
+- **Range:** `00`–`FF` (0–255)
+- **Examples:**
+  - `00` = 0% (fully transparent)
+  - `80` = 50% (semi-transparent)
+  - `FF` = 100% (fully opaque)
+- **Description:** Alpha transparency channel.
+
+### Blend Mode
+
+- **Location:** Characters 32–33
+- **Type:** uint8 (unsigned 8-bit, values 0–7)
+- **Range:**
+  - `00` = Normal
+  - `01` = Add
+  - `02` = Soft Add
+  - `03` = Multiple
+  - `04` = 2x Multiple
+  - `05` = Lighter
+  - `06` = Darker
+  - `07` = Replace
+- **Description:** Compositing mode for how the shape blends with background/layers.
+
+### Visibility, Mirror & MIP
+
+- **Location:** Character 35 (last character)
+- **Type:** uint8 (unsigned 8-bit, values 0–15)
+- **Encoding:** Single byte with 4-bit pattern
+  - **Bit 0 (LSB):** Visibility (1 = visible, 0 = hidden)
+  - **Bit 1:** V-mirror flag (1 = v-mirror enabled)
+  - **Bit 2:** H-mirror flag (1 = h-mirror enabled)
+  - **Bit 3:** MIP/MipMap flag (1 = mip enabled, 0 = mip disabled) **[Groups only]**
+- **Standard Values (0–7):**
+  - `00` = Hidden, no mirrors, no mip
+  - `01` = Visible, no mirrors, no mip
+  - `02` = Hidden, H-mirror only, no mip
+  - `03` = Visible, H-mirror only, no mip
+  - `04` = Hidden, V-mirror only, no mip
+  - `05` = Visible, V-mirror only, no mip
+  - `06` = Hidden, both mirrors, no mip
+  - `07` = Visible, both mirrors, no mip
+- **MIP/MipMap Values (8–15, Groups Only):**
+  - `08` = Hidden, no mirrors, **mip enabled**
+  - `09` = Visible, no mirrors, **mip enabled**
+  - `0A` = Hidden, H-mirror only, **mip enabled**
+  - `0B` = Visible, H-mirror only, **mip enabled**
+  - `0C` = Hidden, V-mirror only, **mip enabled**
+  - `0D` = Visible, V-mirror only, **mip enabled**
+  - `0E` = Hidden, both mirrors, **mip enabled**
+  - `0F` = Visible, both mirrors, **mip enabled**
+- **Description:** Controls shape visibility, automatic mirror duplication, and (for groups only) anti-aliasing via MipMap filtering.
 
 ## Scale Encoding (Signed 16-bit with Flip)
 
@@ -71,18 +219,18 @@ FFFF00000000001400140000FFFFFFFF0001
 >
 ```
 
-| # | Code | Position X | Position Y | Scale X | Scale Y | Hex Position | Hex Scale | Description |
-|---|------|-----------|-----------|---------|---------|---|---|-------------|
-| 1 | `0002FCB10000003200320000FFFFFFFF0001` | FCB1 | 0000 | 0032 | 0032 | −847, 0 | 50 × 50 | Small square |
-| 2 | `0002FE0D0000004B004B0000FFFFFFFF0001` | FE0D | 0000 | 004B | 004B | −499, 0 | 75 × 75 | Medium-small |
-| 3 | `0002FF880000006400640000FFFFFFFF0001` | FF88 | 0000 | 0064 | 0064 | −120, 0 | 100 × 100 | Standard |
-| 4 | `000201280000007D007D0000FFFFFFFF0001` | 0128 | 0000 | 007D | 007D | 296, 0 | 125 × 125 | Medium-large |
-| 5 | `0002030A0000009600960000FFFFFFFF0001` | 030A | 0000 | 0096 | 0096 | 778, 0 | 150 × 150 | Large |
-| 6 | `00020275028500C800C80000FFFFFFFF0001` | 0275 | 0285 | 00C8 | 00C8 | 629, 645 | 200 × 200 | Extra large |
-| 7 | `0002FE7C026E00FA00FA0000FFFFFFFF0001` | FE7C | 026E | 00FA | 00FA | −388, 622 | 250 × 250 | Very large |
-| 8 | `0002FDE9FDC2012C012C0000FFFFFFFF0001` | FDE9 | FDC2 | 012C | 012C | −535, −574 | 300 × 300 | Huge |
-| 9 | `000200ECFD38008800530000FFFFFFFF0001` | 00EC | FD38 | 0088 | 0053 | 236, −712 | 136 × 83 | Custom rectangular |
-| 10 | `000202F9FDAE004200850000FFFFFFFF0001` | 02F9 | FDAE | 0042 | 0085 | 761, −594 | 66 × 163 | Custom tall |
+| # | Code | Pos X | Pos Y | Sca X | Sca Y | Rot | Color | Opacity | Blend | Visibility | Description |
+|---|------|-------|-------|-------|-------|-----|-------|---------|-------|-----------|-------------|
+| 1 | `0002FCB10000003200320000FFFFFFFF0001` | FCB1 | 0000 | 0032 | 0032 | 0000 | FFFFFF | FF | FF | 01 | −847, 0 → 50×50 |
+| 2 | `0002FE0D0000004B004B0000FFFFFFFF0001` | FE0D | 0000 | 004B | 004B | 0000 | FFFFFF | FF | FF | 01 | −499, 0 → 75×75 |
+| 3 | `0002FF880000006400640000FFFFFFFF0001` | FF88 | 0000 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | −120, 0 → 100×100 |
+| 4 | `000201280000007D007D0000FFFFFFFF0001` | 0128 | 0000 | 007D | 007D | 0000 | FFFFFF | FF | FF | 01 | 296, 0 → 125×125 |
+| 5 | `0002030A0000009600960000FFFFFFFF0001` | 030A | 0000 | 0096 | 0096 | 0000 | FFFFFF | FF | FF | 01 | 778, 0 → 150×150 |
+| 6 | `00020275028500C800C80000FFFFFFFF0001` | 0275 | 0285 | 00C8 | 00C8 | 0000 | FFFFFF | FF | FF | 01 | 629, 645 → 200×200 |
+| 7 | `0002FE7C026E00FA00FA0000FFFFFFFF0001` | FE7C | 026E | 00FA | 00FA | 0000 | FFFFFF | FF | FF | 01 | −388, 622 → 250×250 |
+| 8 | `0002FDE9FDC2012C012C0000FFFFFFFF0001` | FDE9 | FDC2 | 012C | 012C | 0000 | FFFFFF | FF | FF | 01 | −535, −574 → 300×300 |
+| 9 | `000200ECFD38008800530000FFFFFFFF0001` | 00EC | FD38 | 0088 | 0053 | 0000 | FFFFFF | FF | FF | 01 | 236, −712 → 136×83 |
+| 10 | `000202F9FDAE004200850000FFFFFFFF0001` | 02F9 | FDAE | 0042 | 0085 | 0000 | FFFFFF | FF | FF | 01 | 761, −594 → 66×163 |
 
 ![Scale Test Reference](./ref/scale.png)
 
@@ -106,18 +254,18 @@ FFFF00000000001400140000FFFFFFFF0001
 >
 ```
 
-| # | Code | Scale X (Hex) | Scale Y (Hex) | Positive | Negative | Effect |
-|---|------|---|---|---|---|-------------|
-| 1 | `0002FCB10000FFCEFFCE0000FFFFFFFF0001` | FFCE | FFCE | 50 | -50 | H-flip & V-flip 50×50 |
-| 2 | `0002FE0D0000FFB5FFB50000FFFFFFFF0001` | FFB5 | FFB5 | 75 | -75 | H-flip & V-flip 75×75 |
-| 3 | `0002FF880000FF9CFF9C0000FFFFFFFF0001` | FF9C | FF9C | 100 | -100 | H-flip & V-flip 100×100 |
-| 4 | `000201280000FF83FF830000FFFFFFFF0001` | FF83 | FF83 | 125 | -125 | H-flip & V-flip 125×125 |
-| 5 | `0002030A0000FF6AFF6A0000FFFFFFFF0001` | FF6A | FF6A | 150 | -150 | H-flip & V-flip 150×150 |
-| 6 | `000202750285FF38FF380000FFFFFFFF0001` | FF38 | FF38 | 200 | -200 | H-flip & V-flip 200×200 |
-| 7 | `0002FE7C026EFF06FF060000FFFFFFFF0001` | FF06 | FF06 | 250 | -250 | H-flip & V-flip 250×250 |
-| 8 | `0002FDE9FDC2FED4FED40000FFFFFFFF0001` | FED4 | FED4 | 300 | -300 | H-flip & V-flip 300×300 |
-| 9 | `000200ECFD38FF78FFAD0000FFFFFFFF0001` | FF78 | FFAD | 136 | -136 | H-flip 136, V-flip -83 |
-| 10 | `000202F9FDAEFFBEFF7B0000FFFFFFFF0001` | FFBE | FF7B | 66 | -66 | H-flip 66, V-flip -123 |
+| # | Code | Pos X | Pos Y | Sca X | Sca Y | Rot | Color | Opacity | Blend | Visibility | Effect |
+|---|------|-------|-------|-------|-------|-----|-------|---------|-------|-----------|--------|
+| 1 | `0002FCB10000FFCEFFCE0000FFFFFFFF0001` | FCB1 | 0000 | FFCE | FFCE | 0000 | FFFFFF | FF | FF | 01 | H-flip & V-flip 50×50 |
+| 2 | `0002FE0D0000FFB5FFB50000FFFFFFFF0001` | FE0D | 0000 | FFB5 | FFB5 | 0000 | FFFFFF | FF | FF | 01 | H-flip & V-flip 75×75 |
+| 3 | `0002FF880000FF9CFF9C0000FFFFFFFF0001` | FF88 | 0000 | FF9C | FF9C | 0000 | FFFFFF | FF | FF | 01 | H-flip & V-flip 100×100 |
+| 4 | `000201280000FF83FF830000FFFFFFFF0001` | 0128 | 0000 | FF83 | FF83 | 0000 | FFFFFF | FF | FF | 01 | H-flip & V-flip 125×125 |
+| 5 | `0002030A0000FF6AFF6A0000FFFFFFFF0001` | 030A | 0000 | FF6A | FF6A | 0000 | FFFFFF | FF | FF | 01 | H-flip & V-flip 150×150 |
+| 6 | `000202750285FF38FF380000FFFFFFFF0001` | 0275 | 0285 | FF38 | FF38 | 0000 | FFFFFF | FF | FF | 01 | H-flip & V-flip 200×200 |
+| 7 | `0002FE7C026EFF06FF060000FFFFFFFF0001` | FE7C | 026E | FF06 | FF06 | 0000 | FFFFFF | FF | FF | 01 | H-flip & V-flip 250×250 |
+| 8 | `0002FDE9FDC2FED4FED40000FFFFFFFF0001` | FDE9 | FDC2 | FED4 | FED4 | 0000 | FFFFFF | FF | FF | 01 | H-flip & V-flip 300×300 |
+| 9 | `000200ECFD38FF78FFAD0000FFFFFFFF0001` | 00EC | FD38 | FF78 | FFAD | 0000 | FFFFFF | FF | FF | 01 | H-flip 136, V-flip -83 |
+| 10 | `000202F9FDAEFFBEFF7B0000FFFFFFFF0001` | 02F9 | FDAE | FFBE | FF7B | 0000 | FFFFFF | FF | FF | 01 | H-flip 66, V-flip -123 |
 
 **Negative Scale Encoding:**
 
@@ -127,6 +275,8 @@ FFFF00000000001400140000FFFFFFFF0001
 | 100 | `0064` | 100 | `FF9C` | -100 | Flipped horizontally & vertically |
 | 150 | `0096` | 150 | `FF6A` | -150 | Flipped horizontally & vertically |
 | 300 | `012C` | 300 | `FED4` | -300 | Flipped horizontally & vertically |
+
+## Position Encoding
 
 Positions use **signed 16-bit integers**, supporting both positive and negative coordinates:
 
@@ -156,62 +306,16 @@ FFFF00000000001400140000FFFFFFFF0001
 >
 ```
 
-| # | Code | Pos X | Pos Y | Hex Position | Scale | Description |
-|---|------|-------|-------|---|-------|-------------|
-| 1 | `000200000000006400640000FFFFFFFF0001` | 0000 | 0000 | 0, 0 | 100×100 | Center square |
-| 2 | `000202000000006400640000FFFFFFFF0001` | 0200 | 0000 | 512, 0 | 100×100 | Right of center |
-| 3 | `000202000200006400640000FFFFFFFF0001` | 0200 | 0200 | 512, 512 | 100×100 | Bottom-right |
-| 4 | `0002FE000000006400640000FFFFFFFF0001` | FE00 | 0000 | −512, 0 | 100×100 | Left of center |
-| 5 | `0002FE00FE00006400640000FFFFFFFF0001` | FE00 | FE00 | −512, −512 | 100×100 | Top-left |
-| 6 | `000203800380006400640000FFFFFFFF0001` | 0380 | 0380 | 896, 896 | 100×100 | Bottom-right corner |
-
-**Position Encoding Breakdown (Line 1):**
-
-- Hex: `000200000000006400640000FFFFFFFF0001`
-- Shape: `0002` (square)
-- Position X: `0000` = 0
-- Position Y: `0000` = 0
-- Scale X: `0064` = 100
-- Scale Y: `0064` = 100
-- Color: `000000` (white, rendered with color encoding)
-- Opacity/Flags: `FFFFFFFF` (full opacity)
-- Mirror: `0001` (none)
-
-Result: White square at origin (0, 0), size 100×100
+| # | Code | Pos X | Pos Y | Sca X | Sca Y | Rot | Color | Opacity | Blend | Visibility | Description |
+|---|------|-------|-------|-------|-------|-----|-------|---------|-------|-----------|-------------|
+| 1 | `000200000000006400640000FFFFFFFF0001` | 0000 | 0000 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | 0, 0 → 100×100 |
+| 2 | `000202000000006400640000FFFFFFFF0001` | 0200 | 0000 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | 512, 0 → 100×100 |
+| 3 | `000202000200006400640000FFFFFFFF0001` | 0200 | 0200 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | 512, 512 → 100×100 |
+| 4 | `0002FE000000006400640000FFFFFFFF0001` | FE00 | 0000 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | -512, 0 → 100×100 |
+| 5 | `0002FE00FE00006400640000FFFFFFFF0001` | FE00 | FE00 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | -512, -512 → 100×100 |
+| 6 | `000203800380006400640000FFFFFFFF0001` | 0380 | 0380 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | 896, 896 → 100×100 |
 
 ![Position Test Reference](./ref/position.png)
-
-## Mirror Modes
-
-Mirrors duplicate shapes with automatic symmetry, reducing file size significantly. Defined by the **last 4 hex characters**:
-
-| Code | Mirror Type | Total Shapes | Effect |
-|------|-------------|--------------|--------|
-| `0001` | None | 1 | Single shape at defined position |
-| `0003` | Horizontal | 2 | Original + left-right mirror |
-| `0005` | Vertical | 2 | Original + top-bottom mirror |
-| `0007` | Both (H+V) | 4 | All 4 quadrants (full symmetry) |
-
-### Mirror Test Examples
-
-**Test Canvas:**
-
-``` text
-FFFF00000000001400140000FFFFFFFF0001
-<
-    000200B001CA006400640000FFFFFFFF0001
-    0002FED10000006400640000FFFFFFFF0003
-    0002FC800380006400640000FFFFFFFF0007
->
-```
-
-| Example | Code | Position | Mirror | Shapes | Description |
-|---------|------|----------|--------|--------|-------------|
-| 1 (Red #1) | `000200B001CA006400640000FFFFFFFF0001` | (176, 458) | 0001 (none) | 1 | Single square at offset position |
-| 2 (Red #3, Green #3) | `0002FED10000006400640000FFFFFFFF0003` | (-303, 0) | 0003 (H) | 2 | Pair centered horizontally |
-| 3 (Red #1–4, Green #3) | `0002FC800380006400640000FFFFFFFF0007` | (-896, 896) | 0007 (H+V) | 4 | All 4 corners with full symmetry |
-
-![Mirror Test Reference](./ref/mirror.png)
 
 ## Group/Canvas Structure
 
@@ -238,53 +342,58 @@ FFFF00000000001400140000FFFFFFFF0001
 
 **Contained Shapes:**
 
-| # | Code | Position | Size | Notes |
-|---|------|----------|------|-------|
-| 1 | `000200000000006400640000FFFFFFFF0001` | (0, 0) | 100×100 | Center square |
-| 2 | `000202000000006400640000FFFFFFFF0001` | (512, 0) | 100×100 | Right of center |
-| 3 | `000202000200006400640000FFFFFFFF0001` | (512, 512) | 100×100 | Bottom-right |
-| 4 | `0002FE000000006400640000FFFFFFFF0001` | (-512, 0) | 100×100 | Left of center |
-| 5 | `0002FE00FE00006400640000FFFFFFFF0001` | (-512, -512) | 100×100 | Top-left |
-| 6 | `000203800380006400640000FFFFFFFF0001` | (896, 896) | 100×100 | Bottom-right corner |
+| # | Code | Pos X,Y | Sca X,Y | Rot | Color | Description |
+|---|------|---------|---------|-----|-------|-------------|
+| 1 | `000200000000006400640000FFFFFFFF0001` | 0, 0 | 100, 100 | 0° | White | Center square |
+| 2 | `000202000000006400640000FFFFFFFF0001` | 512, 0 | 100, 100 | 0° | White | Right of center |
+| 3 | `000202000200006400640000FFFFFFFF0001` | 512, 512 | 100, 100 | 0° | White | Bottom-right |
+| 4 | `0002FE000000006400640000FFFFFFFF0001` | -512, 0 | 100, 100 | 0° | White | Left of center |
+| 5 | `0002FE00FE00006400640000FFFFFFFF0001` | -512, -512 | 100, 100 | 0° | White | Top-left |
+| 6 | `000203800380006400640000FFFFFFFF0001` | 896, 896 | 100, 100 | 0° | White | Bottom-right corner |
 
-## Efficiency: Mirrors vs. Duplication
+---
 
-Using mirror modes significantly reduces file size and simplifies design:
+## Mirror Modes
 
-### Without Mirrors (Verbose)
+Mirrors duplicate shapes with automatic symmetry, reducing file size significantly. Controlled by the **last character** of the code (visibility & mirror combined):
+
+| Code | Mirror Type | Total Shapes | Visibility | Effect |
+|------|-------------|--------------|-----------|--------|
+| `01` | None | 1 | Visible | Single shape at defined position |
+| `03` | Horizontal | 2 | Visible | Original + left-right mirror |
+| `05` | Vertical | 2 | Visible | Original + top-bottom mirror |
+| `07` | Both (H+V) | 4 | Visible | All 4 quadrants (full symmetry) |
+| `00` | None | 1 | Hidden | Hidden single shape |
+| `02` | Horizontal | 2 | Hidden | Hidden pair with h-mirror |
+| `04` | Vertical | 2 | Hidden | Hidden pair with v-mirror |
+| `06` | Both (H+V) | 4 | Hidden | Hidden 4-way symmetry |
+
+### Mirror Test Examples
+
+**Test Canvas:**
 
 ``` text
-0002FED10000006400640000FFFFFFFF0001
-0002FED10000006400640000FFFFFFFF0001
+FFFF00000000001400140000FFFFFFFF0001
+<
+    000200B001CA006400640000FFFFFFFF0001
+    0002FED10000006400640000FFFFFFFF0003
+    0002FC800380006400640000FFFFFFFF0007
+>
 ```
 
-- File size: 80 hex characters (40 bytes)
-- Result: 2 identical shapes at (-303, 0)
+| Example | Code | Pos X, Y | Sca X, Y | Rot | Color | Mirror | Shapes | Description |
+|---------|------|----------|----------|-----|-------|--------|--------|-------------|
+| 1 | `000200B001CA006400640000FFFFFFFF0001` | 176, 458 | 100, 100 | 0° | White | 01 (none) | 1 | Single square at offset |
+| 2 | `0002FED10000006400640000FFFFFFFF0003` | -303, 0 | 100, 100 | 0° | White | 03 (H) | 2 | Pair centered horizontally |
+| 3 | `0002FC800380006400640000FFFFFFFF0007` | -896, 896 | 100, 100 | 0° | White | 07 (H+V) | 4 | All 4 corners with full symmetry |
 
-### With Mirrors (Efficient)
+![Mirror Test Reference](./ref/mirror.png)
 
-``` text
-0002FED10000006400640000FFFFFFFF0003
-```
+---
 
-- File size: 40 hex characters (20 bytes)
-- Result: 2 shapes with automatic left-right symmetry
+## Rotation Encoding
 
-**Savings:** 50% reduction while maintaining identical visual output
-
-## Quick Reference
-
-| Scenario | Position | Mirror | Hex Code | Shapes |
-|----------|----------|--------|----------|--------|
-| Single center | (0, 0) | `0001` | `000200000000006400640000FFFFFFFF0001` | 1 |
-| Offset single | (176, 458) | `0001` | `000200B001CA006400640000FFFFFFFF0001` | 1 |
-| H-symmetric pair | (-303, 0) | `0003` | `0002FED10000006400640000FFFFFFFF0003` | 2 |
-| V-symmetric pair | (0, -256) | `0005` | `0002000FFE00006400640000FFFFFFFF0005` | 2 |
-| 4-way symmetric | (-896, 896) | `0007` | `0002FC800380006400640000FFFFFFFF0007` | 4 |
-
-## Rotation
-
-Rotation is stored as a **16-bit signed integer** (int16, range -32768 to 32767) in the color field (bytes 20–23). Values represent degrees directly, with automatic wrap-around for values outside 0–359°.
+Rotation is stored as a **16-bit signed integer** (int16, range -32768 to 32767) in characters 20–23. Values represent degrees directly, with automatic wrap-around for values outside 0–359°.
 
 **Key Properties:**
 
@@ -300,7 +409,7 @@ Final_Rotation = Rotation_Value mod 360
 If negative: Final_Rotation = Rotation_Value + 360
 ```
 
-### Rotation Encoding
+### Rotation Value Reference
 
 | Rotation | Hex Value | Decimal | Signed Int16 | Normalized | Description |
 |----------|-----------|---------|---|---|-------------|
@@ -331,16 +440,15 @@ FFFF00000000001400140000FFFFFFFF0001
 >
 ```
 
-| # | Code | Pos X,Y | Scale | Rotation (Hex) | Rotation (Dec) | Description |
-|---|------|---------|-------|---|---|-------------|
-| 1 | `0002FCD70000006400640000FFFFFFFF0001` | −809, 0 | 100×100 | 0000 | 0° | Square, no rotation |
-| 2 | `0002FE69000000640064002DFFFFFFFF0001` | −407, 0 | 100×100 | 002D | 45° | Square rotated 45° |
-| 3 | `00020005000000640064005AFFFFFFFF0001` | 5, 0 | 100×100 | 005A | 90° | Square rotated 90° |
-| 4 | `0002FD3E021F008F00480000FFFFFFFF0001` | −706, 543 | 143×72 | 0000 | 0° | Rectangle, no rotation |
-| 5 | `0002FD59031F008F004800B4FFFFFFFF0001` | −679, 799 | 143×72 | 00B4 | 180° | Rectangle rotated 180° |
-| 6 | `0002FF8801D4008F00480038FFFFFFFF0001` | −120, 468 | 143×72 | 0038 | 56° | Rectangle rotated 56° |
-| 7 | `0002014901B6008F00480089FFFFFFFF0001` | 329, 438 | 143×72 | 0089 | 137° | Rectangle rotated 137° |
-| 8 | `0002014901B6008F0048FEE2FFFFFFFF0001` | 329, 438 | 143×72 | FEE2 | -286° (→ 74°) | Rectangle with negative rotation |
+| # | Code | Pos X | Pos Y | Sca X | Sca Y | Rot | Color | Opacity | Blend | Visibility | Description |
+|---|------|-------|-------|-------|-------|-----|-------|---------|-------|-----------|-------------|
+| 1 | `0002FCD70000006400640000FFFFFFFF0001` | FCD7 | 0000 | 0064 | 0064 | 0000 | FFFFFF | FF | FF | 01 | −809, 0 → 100×100 → 0° |
+| 2 | `0002FE69000000640064002DFFFFFFFF0001` | FE69 | 0000 | 0064 | 0064 | 002D | FFFFFF | FF | FF | 01 | −407, 0 → 100×100 → 45° |
+| 3 | `00020005000000640064005AFFFFFFFF0001` | 0005 | 0000 | 0064 | 0064 | 005A | FFFFFF | FF | FF | 01 | 5, 0 → 100×100 → 90° |
+| 4 | `0002FD3E021F008F00480000FFFFFFFF0001` | FD3E | 021F | 008F | 0048 | 0000 | FFFFFF | FF | FF | 01 | −706, 543 → 143×72 → 0° |
+| 5 | `0002FD59031F008F004800B4FFFFFFFF0001` | FD59 | 031F | 008F | 0048 | 00B4 | FFFFFF | FF | FF | 01 | −679, 799 → 143×72 → 180° |
+| 6 | `0002FF8801D4008F00480038FFFFFFFF0001` | FF88 | 01D4 | 008F | 0048 | 0038 | FFFFFF | FF | FF | 01 | −120, 468 → 143×72 → 56° |
+| 7 | `0002014901B6008F00480089FFFFFFFF0001` | 0149 | 01B6 | 008F | 0048 | 0089 | FFFFFF | FF | FF | 01 | 329, 438 → 143×72 → 137° |
 
 **Rotation Decoding Example (Row 7 – Positive Rotation):**
 
@@ -350,8 +458,10 @@ FFFF00000000001400140000FFFFFFFF0001
 - Scale X: `008F` = 143
 - Scale Y: `0048` = 72
 - **Rotation: `0089` = 137°**
-- Opacity/Flags: `FFFFFFFF`
-- Mirror: `0001` (none)
+- Color: `FFFFFF` (white)
+- Opacity: `FF` (100%)
+- Blend: `FF` (normal)
+- Mirror: `01` (visible, no mirror)
 
 Result: White rectangle at (329, 438), size 143×72, rotated 137°
 
@@ -364,8 +474,10 @@ Result: White rectangle at (329, 438), size 143×72, rotated 137°
 - Scale Y: `0048` = 72
 - **Rotation: `FEE2` = -286° (signed int16)**
 - **Normalized: -286° + 360° = 74°**
-- Opacity/Flags: `FFFFFFFF`
-- Mirror: `0001` (none)
+- Color: `FFFFFF` (white)
+- Opacity: `FF` (100%)
+- Blend: `FF` (normal)
+- Mirror: `01` (visible, no mirror)
 
 Result: White rectangle at (329, 438), size 143×72, rotated -286° (visually equivalent to 74°)
 
@@ -377,11 +489,13 @@ Result: White rectangle at (329, 438), size 143×72, rotated -286° (visually eq
 - **Negative rotations:** Stored as signed int16 (-32768 to -1°), normalized to equivalent positive angles
 - **Wrap-around:** All values automatically normalize to 0–359° range during rendering
 
-## Color Format
+---
 
-Colors use **24-bit RGB** in hexadecimal (RRGGBB) stored in bytes 20–25. All 16.7 million colors are supported.
+## Color Examples
 
-### Color Examples
+Colors use **24-bit RGB** in hexadecimal (RRGGBB) stored in characters 24–29. All 16.7 million colors are supported.
+
+### Color Value Reference
 
 | Color | Hex Value | Description |
 |-------|-----------|-------------|
@@ -414,37 +528,27 @@ FFFF00000000001400140000FFFFFFFF0001
 >
 ```
 
-| # | Code | Color Hex | Color Name | Opacity | Description |
-|---|------|---|---|---|-------------|
-| 1 | `0002FE000000006400640000FF0000FF0001` | FF0000 | Red | FF (100%) | Full red, fully opaque |
-| 2 | `00020000000000640064000000FF00FF0001` | 00FF00 | Green | FF (100%) | Full green, fully opaque |
-| 3 | `0002020000000064006400000000FFFF0001` | 0000FF | Blue | FF (100%) | Full blue, fully opaque |
-| 4 | `0002FE00FE00006400640000FFFF00FF0001` | FFFF00 | Yellow | FF (100%) | Red + Green, fully opaque |
-| 5 | `00020000FE00006400640000FF00FFFF0001` | FF00FF | Magenta | FF (100%) | Red + Blue, fully opaque |
-| 6 | `00020200FE0000640064000000FFFFFF0001` | 00FFFF | Cyan | FF (100%) | Green + Blue, fully opaque |
-| 7 | `0002FE0002000064006400004390B5FF0001` | 4390B5 | Teal | FF (100%) | Custom color, fully opaque |
-| 8 | `000200000200006400640000963776CE0001` | 963776 | Mauve | CE (~80%) | Custom color, 206/255 opacity |
-| 9 | `000202000200006400640000BAB2894B0001` | BAB289 | Tan | 4B (~29%) | Custom color, 75/255 opacity |
+| # | Code | Pos X | Pos Y | Sca X | Sca Y | Rot | Color | Opacity | Blend | Visibility | Description |
+|---|------|-------|-------|-------|-------|-----|-------|---------|-------|-----------|-------------|
+| 1 | `0002FE000000006400640000FF0000FF0001` | FE00 | 0000 | 0064 | 0064 | 0000 | FF0000 | FF | FF | 01 | Red, fully opaque |
+| 2 | `00020000000000640064000000FF00FF0001` | 0000 | 0000 | 0064 | 0064 | 0000 | 00FF00 | FF | FF | 01 | Green, fully opaque |
+| 3 | `0002020000000064006400000000FFFF0001` | 0200 | 0000 | 0064 | 0064 | 0000 | 0000FF | FF | FF | 01 | Blue, fully opaque |
+| 4 | `0002FE00FE00006400640000FFFF00FF0001` | FE00 | FE00 | 0064 | 0064 | 0000 | FFFF00 | FF | FF | 01 | Yellow, fully opaque |
+| 5 | `00020000FE00006400640000FF00FFFF0001` | 0000 | FE00 | 0064 | 0064 | 0000 | FF00FF | FF | FF | 01 | Magenta, fully opaque |
+| 6 | `00020200FE0000640064000000FFFFFF0001` | 0200 | FE00 | 0064 | 0064 | 0000 | 00FFFF | FF | FF | 01 | Cyan, fully opaque |
+| 7 | `0002FE0002000064006400004390B5FF0001` | FE00 | 0200 | 0064 | 0064 | 0000 | 4390B5 | FF | FF | 01 | Custom teal, fully opaque |
+| 8 | `000200000200006400640000963776CE0001` | 0000 | 0200 | 0064 | 0064 | 0000 | 963776 | CE | FF | 01 | Custom mauve, ~80% opacity |
+| 9 | `000202000200006400640000BAB2894B0001` | 0200 | 0200 | 0064 | 0064 | 0000 | BAB289 | 4B | FF | 01 | Custom tan, ~29% opacity |
 
-**Color Decoding Example (Row 1 – Red):**
+![Color Blends Test Reference](./ref/colorblends.png)
 
-- Hex: `0002FE000000006400640000FF0000FF0001`
-- Position X: `FE00` = -512
-- Position Y: `0000` = 0
-- Scale X: `0064` = 100
-- Scale Y: `0064` = 100
-- **Color: `FF0000` = Red (255, 0, 0)**
-- **Opacity: `FF` = 255 (100%)**
-- **Blend: `FFFFFF` = Normal**
-- Mirror: `0001` (none)
+---
 
-Result: Red square at (-512, 0), size 100×100, fully opaque, normal blend
+## Opacity Examples
 
-## Opacity
+Opacity (alpha transparency) is stored as an **unsigned 8-bit integer** in characters 30–31 with values from 0–255.
 
-Opacity (alpha transparency) is stored as an **unsigned 8-bit integer** (bytes 26–27, one byte) with values from 0–255.
-
-**Opacity Values:**
+### Opacity Value Reference
 
 | Opacity | Hex | Decimal | Percentage | Description |
 |---------|-----|---------|------------|-------------|
@@ -456,22 +560,6 @@ Opacity (alpha transparency) is stored as an **unsigned 8-bit integer** (bytes 2
 | ~29% | `4B` | 75 | 29% | Custom opacity |
 | Opaque | `FF` | 255 | 100% | Fully opaque (no transparency) |
 
-### Opacity Test Examples
-
-**Test canvas with 3 colored squares at different opacity levels:**
-
-``` text
-0002FE000000006400640000FF0000FF0001    (Red, opacity FF = 100%)
-000200000200006400640000963776CE0001    (Mauve, opacity CE = 206 = ~80%)
-000202000200006400640000BAB2894B0001    (Tan, opacity 4B = 75 = ~29%)
-```
-
-| Shape | Color | Opacity Hex | Opacity Dec | Percentage | Visual Effect |
-|-------|-------|---|---|---|---|
-| Red | FF0000 | FF | 255 | 100% | Fully opaque, no transparency |
-| Mauve | 963776 | CE | 206 | ~81% | Mostly opaque with slight transparency |
-| Tan | BAB289 | 4B | 75 | ~29% | Mostly transparent, faint color |
-
 **Opacity Encoding Formula:**
 
 ``` text
@@ -481,9 +569,69 @@ Opacity_Hex = (Opacity_Percentage / 100) × 255
 
 ---
 
-## Visibility & Mirror Combined Encoding
+## Blend Mode Examples
 
-Shape visibility and mirror modes are **elegantly combined in a single byte** (the last character of the 40-character code) using an **odd/even bit-pattern encoding**. This unified approach encodes three properties in one hex digit:
+Blend mode controls how a shape composites with the background and underlying layers. Stored in characters 32–33 as a value from 0–7.
+
+### Blend Mode Reference
+
+| Mode # | Hex | Blend Mode | Description |
+|--------|-----|-----------|-------------|
+| 0 | `00` | Normal | Standard alpha blending (default) |
+| 1 | `01` | Add | Additive blend (brightens background) |
+| 2 | `02` | Soft Add | Additive blend with reduced intensity |
+| 3 | `03` | Multiple | Multiplicative blend (darkens background) |
+| 4 | `04` | 2x Multiple | Doubled multiplicative blend (stronger darkening) |
+| 5 | `05` | Lighter | Keeps lighter pixels (max of RGB values) |
+| 6 | `06` | Darker | Keeps darker pixels (min of RGB values) |
+| 7 | `07` | Replace | Completely replaces background (ignores alpha) |
+
+### Blend Mode Test Canvas
+
+Test canvas with 8 white squares at different blend modes:
+
+``` text
+FFFF00000000001400140000FFFFFFFF0001
+<
+    0002FC990352006400640000FFFFFFFF0001
+    0002FDB30352006400640000FFFFFFFF0101
+    0002FEC00352006400640000FFFFFFFF0201
+    0002FFDE0352006400640000FFFFFFFF0301
+    000200F90352006400640000FFFFFFFF0401
+    000202170352006400640000FFFFFFFF0501
+    000203520352006400640000FFFFFFFF0601
+    00020352021D006400640000FFFFFFFF0701
+>
+```
+
+| # | Code | Pos X | Pos Y | Sca X | Sca Y | Rot | Color | Opacity | Blend | Visibility | Visual Effect |
+|---|------|-------|-------|-------|-------|-----|-------|---------|-------|-----------|-------------|
+| 1 | `0002FC990352006400640000FFFFFFFF0001` | FC99 | 0352 | 0064 | 0064 | 0000 | FFFFFF | FF | 00 | 01 | Normal blending, respects alpha |
+| 2 | `0002FDB30352006400640000FFFFFFFF0101` | FDB3 | 0352 | 0064 | 0064 | 0000 | FFFFFF | FF | 01 | 01 | Additive: brightens by adding RGB |
+| 3 | `0002FEC00352006400640000FFFFFFFF0201` | FEC0 | 0352 | 0064 | 0064 | 0000 | FFFFFF | FF | 02 | 01 | Soft Add: reduced intensity |
+| 4 | `0002FFDE0352006400640000FFFFFFFF0301` | FFDE | 0352 | 0064 | 0064 | 0000 | FFFFFF | FF | 03 | 01 | Multiple: darkens by RGB multiply |
+| 5 | `000200F90352006400640000FFFFFFFF0401` | 00F9 | 0352 | 0064 | 0064 | 0000 | FFFFFF | FF | 04 | 01 | 2x Multiple: very dark effect |
+| 6 | `000202170352006400640000FFFFFFFF0501` | 0217 | 0352 | 0064 | 0064 | 0000 | FFFFFF | FF | 05 | 01 | Lighter: max of RGB per channel |
+| 7 | `000203520352006400640000FFFFFFFF0601` | 0352 | 0352 | 0064 | 0064 | 0000 | FFFFFF | FF | 06 | 01 | Darker: min of RGB per channel |
+| 8 | `00020352021D006400640000FFFFFFFF0701` | 0352 | 021D | 0064 | 0064 | 0000 | FFFFFF | FF | 07 | 01 | Replace: completely replaces bg |
+
+**Field Location Note:**
+
+The blend mode selector occupies characters 32–33 of the 36-character code:
+
+``` text
+AABBCCCCDDDDEEEEFFFFGGGGHHHHIIJJKKLL
+                              JJ    ← Blend mode (00-07)
+                                LL  ← Visibility + Mirror + MIP
+```
+
+![Color Blends Test Reference](./ref/colorblends.png)
+
+---
+
+## Visibility, Mirror & MIP Combined Encoding
+
+Shape visibility, mirror modes, and MIP filtering are **elegantly combined in a single byte** (the last character of the 36-character code) using a **bit-pattern encoding**. This unified approach encodes four properties in one hex digit:
 
 **Key Properties:**
 
@@ -497,18 +645,26 @@ Shape visibility and mirror modes are **elegantly combined in a single byte** (t
   - Visible shapes with mirrors for symmetrical designs
   - Hidden mirrored shapes for layout scaffolding/guides (invisible but calculated)
 
-### Mirror + Visibility Bit Pattern Table
+### Visibility + Mirror + MIP Bit Pattern Table
 
-| Value | Hex | Binary | Visibility | H-Mirror | V-Mirror | Total Instances | Description |
-|-------|-----|--------|-----------|----------|----------|---------|-------------|
-| 0 | `00` | 000 | ❌ Hidden | ❌ No | ❌ No | 1 | Single hidden shape |
-| 1 | `01` | 001 | ✅ Visible | ❌ No | ❌ No | 1 | Single visible shape |
-| 2 | `02` | 010 | ❌ Hidden | ✅ Yes | ❌ No | 2 | Two hidden h-mirrored instances |
-| 3 | `03` | 011 | ✅ Visible | ✅ Yes | ❌ No | 2 | Two visible h-mirrored instances |
-| 4 | `04` | 100 | ❌ Hidden | ❌ No | ✅ Yes | 2 | Two hidden v-mirrored instances |
-| 5 | `05` | 101 | ✅ Visible | ❌ No | ✅ Yes | 2 | Two visible v-mirrored instances |
-| 6 | `06` | 110 | ❌ Hidden | ✅ Yes | ✅ Yes | 4 | Four hidden fully-mirrored instances |
-| 7 | `07` | 111 | ✅ Visible | ✅ Yes | ✅ Yes | 4 | Four visible fully-mirrored instances |
+| Value | Hex | Binary | Visibility | H-Mirror | V-Mirror | MIP | Total Instances | Description |
+|-------|-----|--------|-----------|----------|----------|-----|---------|-------------|
+| 0 | `00` | 0000 | ❌ Hidden | ❌ No | ❌ No | ❌ No | 1 | Single hidden shape, no mip |
+| 1 | `01` | 0001 | ✅ Visible | ❌ No | ❌ No | ❌ No | 1 | Single visible shape, no mip |
+| 2 | `02` | 0010 | ❌ Hidden | ✅ Yes | ❌ No | ❌ No | 2 | Two hidden h-mirrored instances, no mip |
+| 3 | `03` | 0011 | ✅ Visible | ✅ Yes | ❌ No | ❌ No | 2 | Two visible h-mirrored instances, no mip |
+| 4 | `04` | 0100 | ❌ Hidden | ❌ No | ✅ Yes | ❌ No | 2 | Two hidden v-mirrored instances, no mip |
+| 5 | `05` | 0101 | ✅ Visible | ❌ No | ✅ Yes | ❌ No | 2 | Two visible v-mirrored instances, no mip |
+| 6 | `06` | 0110 | ❌ Hidden | ✅ Yes | ✅ Yes | ❌ No | 4 | Four hidden fully-mirrored instances, no mip |
+| 7 | `07` | 0111 | ✅ Visible | ✅ Yes | ✅ Yes | ❌ No | 4 | Four visible fully-mirrored instances, no mip |
+| 8 | `08` | 1000 | ❌ Hidden | ❌ No | ❌ No | ✅ **MIP** | 1 | Single hidden shape, **mip enabled** (groups only) |
+| 9 | `09` | 1001 | ✅ Visible | ❌ No | ❌ No | ✅ **MIP** | 1 | Single visible shape, **mip enabled** (groups only) |
+| 10 | `0A` | 1010 | ❌ Hidden | ✅ Yes | ❌ No | ✅ **MIP** | 2 | Two hidden h-mirrored instances, **mip enabled** (groups only) |
+| 11 | `0B` | 1011 | ✅ Visible | ✅ Yes | ❌ No | ✅ **MIP** | 2 | Two visible h-mirrored instances, **mip enabled** (groups only) |
+| 12 | `0C` | 1100 | ❌ Hidden | ❌ No | ✅ Yes | ✅ **MIP** | 2 | Two hidden v-mirrored instances, **mip enabled** (groups only) |
+| 13 | `0D` | 1101 | ✅ Visible | ❌ No | ✅ Yes | ✅ **MIP** | 2 | Two visible v-mirrored instances, **mip enabled** (groups only) |
+| 14 | `0E` | 1110 | ❌ Hidden | ✅ Yes | ✅ Yes | ✅ **MIP** | 4 | Four hidden fully-mirrored instances, **mip enabled** (groups only) |
+| 15 | `0F` | 1111 | ✅ Visible | ✅ Yes | ✅ Yes | ✅ **MIP** | 4 | Four visible fully-mirrored instances, **mip enabled** (groups only) |
 
 ### Visibility & Mirror Test Canvas
 
@@ -578,31 +734,58 @@ FFFF00000000006400640000FFFFFFFF0001
 - Result: **4 hidden shapes** (not rendered, but 4 mirrored instances calculated)
 - **Use case:** Layout scaffolding, invisible guide shapes for alignment
 
+### MIP/MipMap Feature (Groups Only)
+
+**MIP (MipMap) Filtering:**
+
+- **Purpose:** Applies anti-aliasing to pixelated/rasterized group content, making sharp edges appear blurry/smooth
+- **Availability:** Groups only (type `FFFF`). Has no effect on regular shapes
+- **Encoding:** Bit 3 of the last byte (values `08`–`0F`)
+- **Visual Effect:** Smooths pixelated group content for a polished appearance
+- **Technical Note:** MipMap filtering reduces aliasing artifacts when groups are scaled or rotated
+- **Use Cases:**
+  - Smoothing rasterized sprite content in groups
+  - Reducing aliasing artifacts on scaled group content
+  - Creating polished visual effects while maintaining sharp edges on regular shapes
+
 ### Why This Encoding is Elegant
 
-1. **Single byte encodes 3 independent properties:** Visibility + H-mirror + V-mirror
-2. **Binary bit logic:** Each mirror axis is a separate bit, allowing all 8 combinations
+1. **Single byte encodes 4 independent properties:** Visibility + H-mirror + V-mirror + MIP
+2. **Binary bit logic:** Each property is a separate bit, allowing 16 total combinations (0–15)
 3. **Natural odd/even pattern:** Visibility determined by LSB (bit 0)
 4. **Space efficient:** Uses only 1 hex character instead of separate fields
 5. **Mirrors work even when hidden:** Enables invisible guide shapes and layout scaffolding
+6. **MIP extends standard encoding:** Values 8–15 add mip functionality without conflicting with standard values 0–7
+7. **Selective feature:** MIP only affects groups, allowing precise control per shape type
 
 ### Field Location
 
-The visibility and mirror encoding occupies the **last character** of the 40-character code:
+The visibility, mirror, and MIP encoding occupies the **last character** of the 36-character code:
 
 ``` text
 AABBCCCCDDDDEEEEFFFFGGGGHHHHIIJJKKLL
-                                    LL ← Mirror + Visibility (00-07)
-                                      = Binary: HH VV V (H=h-mirror, V=v-mirror, V=visibility)
+                                    LL ← Visibility + Mirror + MIP (00-0F)
+                                      = Binary: M HH VV V (M=mip, H=h-mirror, V=v-mirror, V=visibility)
                                       
-01 = 0b001 = visible, no mirrors
-03 = 0b011 = visible, h-mirror
-05 = 0b101 = visible, v-mirror
-07 = 0b111 = visible, both mirrors
-00 = 0b000 = hidden, no mirrors
-02 = 0b010 = hidden, h-mirror
-04 = 0b100 = hidden, v-mirror
-06 = 0b110 = hidden, both mirrors
+Standard encoding (no mip):
+01 = 0b0001 = visible, no mirrors, no mip
+03 = 0b0011 = visible, h-mirror, no mip
+05 = 0b0101 = visible, v-mirror, no mip
+07 = 0b0111 = visible, both mirrors, no mip
+00 = 0b0000 = hidden, no mirrors, no mip
+02 = 0b0010 = hidden, h-mirror, no mip
+04 = 0b0100 = hidden, v-mirror, no mip
+06 = 0b0110 = hidden, both mirrors, no mip
+
+MIP encoding (groups only):
+09 = 0b1001 = visible, no mirrors, mip enabled (groups only)
+0B = 0b1011 = visible, h-mirror, mip enabled (groups only)
+0D = 0b1101 = visible, v-mirror, mip enabled (groups only)
+0F = 0b1111 = visible, both mirrors, mip enabled (groups only)
+08 = 0b1000 = hidden, no mirrors, mip enabled (groups only)
+0A = 0b1010 = hidden, h-mirror, mip enabled (groups only)
+0C = 0b1100 = hidden, v-mirror, mip enabled (groups only)
+0E = 0b1110 = hidden, both mirrors, mip enabled (groups only)
 ```
 
 ### Visual Comparison: Visible vs Hidden Mirrors
@@ -618,95 +801,6 @@ This design allows designers to create invisible structural guides and helper sh
 
 ---
 
-## Blend Mode
-
-Blend mode is stored as a **single hex digit** (bytes 38–39, second to last character of the final field) that controls how the shape composites with the background/underlying layers.
-
-**Blend Mode Encoding:**
-
-| Mode # | Hex | Blend Mode | Description |
-|--------|-----|-----------|-------------|
-| 0 | `01` | Normal | Standard alpha blending (default) |
-| 1 | `0101` | Add | Additive blend (brightens background) |
-| 2 | `0201` | Soft Add | Additive blend with reduced intensity |
-| 3 | `0301` | Multiple | Multiplicative blend (darkens background) |
-| 4 | `0401` | 2x Multiple | Doubled multiplicative blend (stronger darkening) |
-| 5 | `0501` | Lighter | Keeps lighter pixels (max of RGB values) |
-| 6 | `0601` | Darker | Keeps darker pixels (min of RGB values) |
-| 7 | `0701` | Replace | Completely replaces background (ignores alpha) |
-
-### Blend Mode Test Canvas
-
-Test canvas with 8 white squares at different blend modes:
-
-``` text
-FFFF00000000001400140000FFFFFFFF0001
-<
-    0002FC990352006400640000FFFFFFFF0001
-    0002FDB30352006400640000FFFFFFFF0101
-    0002FEC00352006400640000FFFFFFFF0201
-    0002FFDE0352006400640000FFFFFFFF0301
-    000200F90352006400640000FFFFFFFF0401
-    000202170352006400640000FFFFFFFF0501
-    000203520352006400640000FFFFFFFF0601
-    00020352021D006400640000FFFFFFFF0701
->
-```
-
-| # | Blend Mode | Hex Code | Last 4 Chars | Visual Effect |
-|---|---|---|---|---|
-| 1 | Normal | 0001 | `0001` | Standard blending, respects alpha |
-| 2 | Add | 0101 | `0101` | Additive: brightens by adding RGB values |
-| 3 | Soft Add | 0201 | `0201` | Additive with reduced intensity |
-| 4 | Multiple | 0301 | `0301` | Multiplicative: darkens by multiplying RGB |
-| 5 | 2x Multiple | 0401 | `0401` | Doubled multiplicative: very dark effect |
-| 6 | Lighter | 0501 | `0501` | Keeps lighter color per channel |
-| 7 | Darker | 0601 | `0601` | Keeps darker color per channel |
-| 8 | Replace | 0701 | `0701` | Replaces background completely (no alpha) |
-
-**Blend Mode Field Location:**
-
-The blend mode selector occupies the **second-to-last character** of the 40-character code, while the **last character** encodes **both mirror mode and visibility**:
-
-``` text
-AABBCCCCDDDDEEEEFFFFGGGGHHHHIIJJKKLL
-                              KK    ← Blend selector (01-07, first char)
-                                LL  ← Mirror + Visibility combined
-                                     (01/03/05/07 = visible)
-                                     (00/02/04/06 = hidden)
-```
-
-**Character Breakdown (positions 38–39, last 2 chars):**
-
-- **Char 38 (K):** Blend selector (0-7 determining blend mode: 0=normal, 1=add, 2=soft add, etc.)
-- **Char 39 (L):** Mirror + Visibility (0-7 using odd/even and bit patterns)
-
-### Example: Normal Blend, Visible, No Mirror (01)
-
-- Full code: `0002FE000000006400640000FFFFFFFF0001`
-- Last 2 chars: `01`
-  - Char 38: `0` = Normal blend (0)
-  - Char 39: `1` = ODD (visible), no mirror bits
-- Result: White square, normal blend, visible, no mirror
-
-### Example: Add Blend, Visible, No Mirror (1 + 01)
-
-- Full code: `0002FDB30352006400640000FFFFFFFF0101`
-- Last 2 chars: `01`
-  - Char 38: `0` = Add blend (1) prefix
-  - Char 39: `1` = ODD (visible), no mirror bits
-- Result: White square, add blend, visible, no mirror
-
-### Example: Normal Blend, Hidden, Both Mirrors (00 + 06)
-
-- Full code: `0002FE79FEDF006400640000FFFFFFFF0006`
-- Last 2 chars: `06`
-  - Char 38: `0` = Normal blend
-  - Char 39: `6` = EVEN (hidden), both mirror bits set
-- Result: 4 hidden mirrored instances (not rendered, but mirror calculation applied)
-
----
-
 ## Best Practices
 
 1. **Use mirrors for symmetry** — Reduces file size by 50–75% while maintaining visual accuracy
@@ -715,3 +809,6 @@ AABBCCCCDDDDEEEEFFFFGGGGHHHHIIJJKKLL
 4. **Standardize offsets** — Use common values (512, 896) to maintain consistency
 5. **Test scale ranges** — Validate that shapes render correctly at 50–300+ pixel dimensions
 6. **Combine position + scale** — Position determines placement; scale determines size
+7. **Verify blend modes** — Test each blend mode to understand visual effects on your specific design
+8. **Use hidden mirrors for guides** — Create invisible scaffolding with hidden mirrored shapes for alignment
+9. **Apply MIP to groups** — Use MIP filtering (values `08`–`0F`) on groups containing rasterized/pixelated content to smooth edges and reduce aliasing
