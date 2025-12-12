@@ -58,8 +58,6 @@ export const commonStyles = {
     background: variant === 'primary' ? theme.colors.primary : theme.colors.secondary,
     color: theme.colors.background,
     border: 'none',
-    opacity: 0.6,
-    cursor: 'not-allowed',
     width: isMobile ? '100%' : 'auto',
     fontSize: theme.fontSizes.sm,
     fontWeight: 600,
@@ -95,14 +93,13 @@ export const commonStyles = {
     background: theme.colors.background,
   }),
 
-  // Canvas containers
+  // Canvas containers — square display (1:1) by default
   canvas: (isMobile: boolean, bgColor?: string): CSSProperties => ({
     width: '100%',
     maxWidth: isMobile ? '100%' : 400,
     aspectRatio: '1',
     overflow: 'hidden',
     background: bgColor || theme.colors.background,
-    borderRadius: theme.borderRadius.sm,
     margin: '0 auto',
   }),
 
